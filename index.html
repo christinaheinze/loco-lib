@@ -36,14 +36,15 @@
 <h2>
 <a id="problem-setting" class="anchor" href="#problem-setting" aria-hidden="true"><span class="octicon octicon-link"></span></a>Problem setting</h2>
 
-<p>LOCO (add refs to paper) is a distributed algorithm for \( \ell_2 \) - penalised convex estimation problems (add formula)
+<p>LOCO is a distributed algorithm for \( \ell_2 \) - penalised convex estimation problems of the form
 
 \[ \min_{\boldsymbol{\beta}} J(\boldsymbol{\beta}):= \frac{1}{n} \sum_{i=1}^n f_i(\boldsymbol{\beta}^\top \mathbf{x}_i) + \frac{\lambda}{2} \Vert \boldsymbol{\beta} \Vert^2 \] </p>
 
 <p>LOCO is suitable in a setting where the number of features \( p \) is very large so that splitting the design matrix 
 across features rather than observations is reasonable. For instance, \( n \) can be smaller than \( p \) or on the same order.</p>
 
-<p>Random projections ... (add figure) </p>
+<!-- <p>Random projections ... (add figure) </p> -->
+<img src="images/loco.jpg" alt="LOCO scheme" style="width:304px;height:228px">
 
 <h2>
 <a id="usage" class="anchor" href="#usage" aria-hidden="true"><span class="octicon octicon-link"></span></a>Usage</h2>
