@@ -19,7 +19,7 @@ across _features_ rather than observations is reasonable. For instance, the numb
 
 # One-shot communication scheme
 
-One large advantage of LOCO over iterative distributed algorithms such as distributed stochastic gradient descent (SGD) is that LOCO only needs one round of communication before the results are send back to the driver. Therefore, the communication cost -- which is generally the bottleneck in distributed computing -- is very low.
+One large advantage of LOCO over iterative distributed algorithms such as distributed stochastic gradient descent (SGD) is that LOCO only needs one round of communication before the results are sent back to the driver. Therefore, the communication cost -- which is generally the bottleneck in distributed computing -- is very low.
 
 LOCO proceeds as follows. As a preprocessing step, the features need to be distributed across processing units by randomly partitioning the data into K blocks. After this first step, some number of feature vectors are stored on each worker. We shall call these features the "raw" features of worker \\(k\\). Subsequently, each worker applies a dimensionality reduction on its raw features by using a random projection. The resulting features are called the "random features" of worker \\(k\\). Then each worker sends its random features to the other workers. Each worker then adds or concatenates the random features from the other workers and appends these random features to its own raw features. Using this scheme, each worker has access to its raw features and, additionally, to a compressed version of the remaining workers' raw features. Using this design matrix, each worker estimates coefficients locally and returns the ones for its own raw features. As these were learned using the contribution from the random features, they approximate the optimal coefficients sufficiently well. The final estimate returned by LOCO is simply the concatenation of the raw feature coefficients returned from the \\( K \\) workers. 
 
@@ -161,9 +161,12 @@ The following list provides a description of all options that can be provided to
 
 The smallest possible projection dimension depends on the rank of the data matrix \\( \boldsymbol{X} \\). If you expect your data to be low-rank so that LOCO is suitable, we recommend using a projection dimension of about 10% of the number of features you are compressing. The latter depends on whether you choose to add or to concatenate the random features.
 	
-### Adding the random features
-
 ### Concatenating the random features
+As described in the original LOCO paper, the first option for collecting the random projections from the other workers is to concatenate them and append these random features to the raw features. More specifically, each worker has \\( \tau = p / K \\) raw features which are compressed to \\( \tau\_{subs} \\) random features. These random features are then communicated and concatenating all random features from the remaining workers results in a dimensionality of the random features of \\( (K-1) \cdot \tau_{subs} \\). Finally, the full local design matrix, consisting of raw and random features, has dimension \\( n \times (\tau + (K-1) \cdot \tau\_{subs}) \\).
+
+### Adding the random features
+If the projection matrix is a random matrix, e.g. with entries in \\( \( 0, 1, -1\) \\) drawn with probabilities \\( \{ \frac{2}{3}, \frac{1}{6}, \frac{1}{6} \} \\), one can alternatively add the random projections.  
+
 
 # Preprocessing package
 The preprocessing package can be used to 
