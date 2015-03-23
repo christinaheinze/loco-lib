@@ -25,7 +25,7 @@ LOCO proceeds as follows. As a preprocessing step, the features need to be distr
 
 LOCO's distribution scheme is illustrated in the following figure.
 
-![LOCO]({{ site.baseurl }}/images/loco2.png)
+![LOCO]({{ site.baseurl }}/images/locoscheme.png)
 
 # Obtaining the software
 
