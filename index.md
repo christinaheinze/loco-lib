@@ -51,24 +51,60 @@ Once the first version of LOCO will have been published, the binaries will be av
 
 ## Ridge Regression
 
-To run ridge regression locally on the regression data set provided in the `data` directory, run:
+To run ridge regression locally on the 'climate' regression data set provided in the `data` directory, run:
 {% highlight bash %}
-spark-1.2.0/bin/spark-submit \
+spark-1.3.0/bin/spark-submit \
 	--class "LOCO.driver" \
-	--master local \
-	--driver-memory 2G \
-	target/scala-2.10/
+	--master local[4] \
+	target/scala-2.10/LOCO-assembly-0.1.jar \
+	--classification=false \
+	--optimizer=SDCA \
+	--numIterations=5000 \
+	--dataFormat=text \
+	--separateTrainTestFiles=true \
+	--trainingDatafile="data/climate_train.txt" \
+	--testDatafile="data/climate_test.txt" \
+	--center=true \
+	--Proj=sparse \ 
+	--concatenate=true \
+	--CVKind=none \
+	--lambda=70 \
+	--nFeatsProj=260 \
+	--nPartitions=4
+	
 {% endhighlight %}
+
+The estimated coefficients can be plotted as follows as each feature corresponds to one grid point on the globe. For more information on the data set, see [LOCO: Distributing Ridge Regression with Random Projections](http://arxiv.org/abs/1406.3469).
+
+![regression_coefficients]({{ site.baseurl }}/images/beta_loco.png)
 
 ## SVM
 
 To train a binary SVM with hinge loss locally on the classification data set provided in the `data` directory, run:
 {% highlight bash %}
-spark-1.2.0/bin/spark-submit \
+spark-1.3.0/bin/spark-submit \
 	--class "LOCO.driver" \
-	--master local \
-	--driver-memory 2G \
-	target/scala-2.10/
+	--master local[4] \
+	target/scala-2.10/LOCO-assembly-0.1.jar \
+	--classification=true \
+	--optimizer=SDCA
+	--numIterations=15000 \
+	--dataFormat=object \
+	--separateTrainTestFiles=true \
+	---trainingDatafile="data/" \
+	--testDatafile="data/" \
+	--center=false \
+	--centerFeaturesOnly=false \ 
+	--Proj=sparse \ 
+	--concatenate=false \
+	--CVKind=global \
+	--lambda=150 \
+	--kfold=2 \
+	--nFeatsProj=7188 \
+	--lambdaSeqFrom=130 \
+	--lambdaSeqTo=140 \
+	--lambdaSeqBy=.1 \
+	--nPartitions=24
 {% endhighlight %}
 
 
@@ -159,14 +195,13 @@ The following list provides a description of all options that can be provided to
 
 ## Choosing the projection dimension
 
-The smallest possible projection dimension depends on the rank of the data matrix \\( \boldsymbol{X} \\). If you expect your data to be low-rank so that LOCO is suitable, we recommend using a projection dimension of about 10% of the number of features you are compressing. The latter depends on whether you choose to add or to concatenate the random features.
+The smallest possible projection dimension depends on the rank of the data matrix \\( \boldsymbol{X} \\). If you expect your data to be low-rank so that LOCO is suitable, we recommend using a projection dimension of about 10% of the number of features you are compressing. The latter depends on whether you choose to add or to concatenate the random features. This projection dimension should be used as a starting point, of course you can test whether your data set allows for a larger degree of compression by tuning the projection dimension together with the regularisation parameter \\( \lambda \\).
 	
 ### Concatenating the random features
 As described in the original LOCO paper, the first option for collecting the random projections from the other workers is to concatenate them and append these random features to the raw features. More specifically, each worker has \\( \tau = p / K \\) raw features which are compressed to \\( \tau\_{subs} \\) random features. These random features are then communicated and concatenating all random features from the remaining workers results in a dimensionality of the random features of \\( (K-1) \cdot \tau_{subs} \\). Finally, the full local design matrix, consisting of raw and random features, has dimension \\( n \times (\tau + (K-1) \cdot \tau\_{subs}) \\).
 
 ### Adding the random features
-If the projection matrix is a random matrix, e.g. with entries in \\( \( 0, 1, -1\) \\) drawn with probabilities \\( \{ \frac{2}{3}, \frac{1}{6}, \frac{1}{6} \} \\), one can alternatively add the random projections.  
-
+If the projection matrix is a random matrix, e.g. with entries in \\( \( 0, 1, -1\) \\) drawn with probabilities \\( \{ \frac{2}{3}, \frac{1}{6}, \frac{1}{6} \} \\), one can alternatively add the random projections. This is equivalent to projecting all raw features not belonging to worker \\( k \\) at once. If the data set is very low-rank, this scheme may allow for a smaller dimensionality of the random features than concatenation of the random features as we can now project from \\( (p - p/K)\\) to \\( \tau\_{subs} \\) instead of from \\( \tau = p/K \\) to \\( \tau\_{subs} \\).
 
 # Preprocessing package
 The preprocessing package can be used to 
