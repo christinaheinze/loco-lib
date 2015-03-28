@@ -37,7 +37,7 @@ Checkout the project repository
 
 and build the package with
 {% highlight bash %}
-cd loco-lib
+cd loco-lib/LOCO
 sbt assembly
 {% endhighlight %}
 
@@ -155,11 +155,11 @@ The following list provides a description of all options that can be provided to
 
 `myseed` Random seed
 
-`classification` True if the problem at hand is a classification task, otherwise regression will be performed
+`classification` True if the problem at hand is a classification task, otherwise ridge regression will be performed
 
 `lossClassification` Loss function to be used in classification (to be added)
 
-`optimizer` Solver used in the local optimisation. Can be either "SDCA" (stochastic dual coordinate ascent) or "factorie". If the latter is chosen, ridge regression is optimised by L-BFGS.
+`optimizer` Solver used in the local optimisation. Can be either ["SDCA"](#references) (stochastic dual coordinate ascent) or ["factorie"](#references). If the latter is chosen, ridge regression is optimised by L-BFGS.
 
 `numIterations` If SDCA is chosen, number of iterations used
 
@@ -179,9 +179,9 @@ The following list provides a description of all options that can be provided to
 
 `CVKind` Can be either "global", "local", or "none"
 
-* "Global" performs the full LOCO algorithm for a provided sequence of regularisation parameters and returns the parameter value yielding the smallest misclassification rate in case of classification and the smallest MSE in case of regression. 
+* "global" performs the full LOCO algorithm for a provided sequence of regularisation parameters and returns the parameter value yielding the smallest misclassification rate in case of classification and the smallest MSE in case of regression. 
 
-* "Local" finds the optimal regularisation parameters for the local optimisation problems, i.e. the relevant training and test sets are splits of the local design matrices. 
+* "local" finds the optimal regularisation parameters for the local optimisation problems, i.e. the relevant training and test sets are splits of the local design matrices. 
 
 `kfold` Number of splits to use for cross validation
 
@@ -191,7 +191,7 @@ The following list provides a description of all options that can be provided to
 
 `lambdaSeqBy` Step size for regularisation parameter sequence to use for cross validation
 
-`lambda` If no cross validation should be performed, regularisation parameter to use
+`lambda` If no cross validation should be performed (`CVKind=none`), regularisation parameter to use
 
 ## Choosing the projection dimension
 
@@ -206,9 +206,26 @@ If the projection matrix is a random matrix, e.g. with entries in \\( \( 0, 1, -
 # Preprocessing package
 The preprocessing package can be used to 
 
-* center and/or scale the features and/or the response to have zero mean and unit variance
-* convert text files of various formats to the case classes `DataPoint` (needed for LOCO) or `LabeledPoint` (needed for the Spark machine learning library MLlib)
-* save the data files in serialised format using the Kryo serialisation library
+* center and/or scale the features and/or the response to have zero mean and unit variance, using [Spark MLlib](http://spark.apache.org/docs/1.2.1/mllib-guide.html)'s [`StandardScaler`](http://spark.apache.org/docs/1.2.1/mllib-feature-extraction.html#standardscaler).
+* save data files in serialised format using the Kryo serialisation library. This code follows the example from @phatak-dev provided [here](http://blog.madhukaraphatak.com/kryo-disk-serialization-in-spark/).
+* convert text files of the formats "libsvm", "comma", and "space" (see examples under [options](#options)) to object files with RDDs containing elements of type 
+	- `DataPoint` (needed for LOCO, see details [below](#datapoint))
+	- [`LabeledPoint`](http://spark.apache.org/docs/1.3.0/api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) (needed for the algorithms provided in Spark's machine learning library MLlib)
+	- `Array[Double]` where the first entry is the response, followed by the features
+
+## Data Structures
+The preprocessing package defines two case classes LOCO relies on:
+
+### DataPoint
+The case class `DataPoint` that is modelled after MLlib's [`LabeledPoint`](http://spark.apache.org/docs/1.3.0/api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint):
+{% highlight Scala %}
+case class DataPoint(label: Double, features: breeze.linalg.Vector[Double])
+{% endhighlight %}
+### FeatureVector
+The case class `FeatureVector` contains all observations of a particular variable as a vector in the field `observations`. The field `index` serves as an identifier for the feature vector.
+{% highlight Scala %}
+case class FeatureVector(index : Int, observations: breeze.linalg.Vector[Double])
+{% endhighlight %}
 
 ## Example
 
@@ -226,7 +243,7 @@ The preprocessing package can be used to
 {% endhighlight %}
 
 
-*  Use Java's more recent "garbage first" garbage collector which was designed for heaps larger than 4GB 
+*  Use Java's more recent "garbage first" garbage collector which was designed for heaps larger than 4GB if there are no memory constraints 
 
 {% highlight bash %}
 --conf "spark.executor.extraJavaOptions=-XX:+UseG1GC"
@@ -242,3 +259,9 @@ The preprocessing package can be used to
 The LOCO algorithm is described in the following paper:
 
  * _Heinze, C., McWilliams, B., Meinshausen, N., Krummenacher, G., Vanchinathan, H. P. (2014) [LOCO: Distributing Ridge Regression with Random Projections](http://arxiv.org/abs/1406.3469)_
+
+ Further references:
+ 
+ * _McCallum, A., Schultz, K., Singh, S. [FACTORIE: Probabilistic Programming via Imperatively Defined Factor Graphs](http://people.cs.umass.edu/~mccallum/papers/factorie-nips09.pdf). Neural Information Processing Systems (NIPS), 2009._
+ * _Shalev-Shwartz, S. and Zhang, T. [Stochastic dual coordinate ascent methods for regularized loss minimization](http://www.jmlr.org/papers/volume14/shalev-shwartz13a/shalev-shwartz13a.pdf). JMLR, 14:567–599, February 2013c._
+ 

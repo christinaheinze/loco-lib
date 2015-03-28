@@ -1,3 +1,5 @@
 highlighter: pygments
 github: [Repository metadata]
 baseurl: /loco-lib
+gems:
+- jekyll-mentions
