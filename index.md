@@ -54,23 +54,25 @@ Once the first version of LOCO will have been published, the binaries will be av
 To run ridge regression locally on the 'climate' regression data set provided in the `data` directory, run:
 {% highlight bash %}
 spark-1.3.0/bin/spark-submit \
-	--class "LOCO.driver" \
-	--master local[4] \
-	target/scala-2.10/LOCO-assembly-0.1.jar \
-	--classification=false \
-	--optimizer=SDCA \
-	--numIterations=5000 \
-	--dataFormat=text \
-	--separateTrainTestFiles=true \
-	--trainingDatafile="data/climate_train.txt" \
-	--testDatafile="data/climate_test.txt" \
-	--center=true \
-	--Proj=sparse \ 
-	--concatenate=true \
-	--CVKind=none \
-	--lambda=70 \
-	--nFeatsProj=260 \
-	--nPartitions=4
+--class "LOCO.driver" \
+--master local[4] \
+--driver-memory 1G \
+target/scala-2.10/LOCO-assembly-0.1.jar \
+--classification=false \
+--optimizer=SDCA \
+--numIterations=5000 \
+--dataFormat=text \
+--textDataFormat=spaces \
+--separateTrainTestFiles=true \
+--trainingDatafile="../data/climate_train.txt" \
+--testDatafile="../data/climate_test.txt" \
+--center=true \
+--Proj=sparse \
+--concatenate=true \
+--CVKind=none \
+--lambda=70 \
+--nFeatsProj=260 \
+--nPartitions=4
 	
 {% endhighlight %}
 
@@ -91,7 +93,7 @@ spark-1.3.0/bin/spark-submit \
 	--numIterations=15000 \
 	--dataFormat=object \
 	--separateTrainTestFiles=true \
-	---trainingDatafile="data/" \
+	--trainingDatafile="data/" \
 	--testDatafile="data/" \
 	--center=false \
 	--centerFeaturesOnly=false \ 
@@ -108,17 +110,17 @@ spark-1.3.0/bin/spark-submit \
 {% endhighlight %}
 
 
-# Options
+# LOCO<sup>lib</sup> options
 
 The following list provides a description of all options that can be provided to LOCO. 
 
-`outdir : String` Directory where to save the summary statistics and the estimated coefficients as text files
+`outdir` Directory where to save the summary statistics and the estimated coefficients as text files
 
-`saveToHDFS : Boolean` True if output should be saved on HDFS
+`saveToHDFS` True if output should be saved on HDFS
 
-`nPartitions : Int` Number of blocks to partition the design matrix 
+`nPartitions` Number of blocks to partition the design matrix 
 
-`dataFormat : String` Can be either "text" or "object"
+`dataFormat` Can be either "text" or "object"
 
 `textDataFormat` If `dataFormat` is "text", it can have the following formats: 
 
@@ -204,11 +206,11 @@ As described in the original LOCO paper, the first option for collecting the ran
 If the projection matrix is a random matrix, e.g. with entries in \\( \( 0, 1, -1\) \\) drawn with probabilities \\( \{ \frac{2}{3}, \frac{1}{6}, \frac{1}{6} \} \\), one can alternatively add the random projections. This is equivalent to projecting all raw features not belonging to worker \\( k \\) at once. If the data set is very low-rank, this scheme may allow for a smaller dimensionality of the random features than concatenation of the random features as we can now project from \\( (p - p/K)\\) to \\( \tau\_{subs} \\) instead of from \\( \tau = p/K \\) to \\( \tau\_{subs} \\).
 
 # Preprocessing package
-The preprocessing package can be used to 
+The preprocessing package 'preprocessingUtils' can be used to 
 
 * center and/or scale the features and/or the response to have zero mean and unit variance, using [Spark MLlib](http://spark.apache.org/docs/1.2.1/mllib-guide.html)'s [`StandardScaler`](http://spark.apache.org/docs/1.2.1/mllib-feature-extraction.html#standardscaler).
 * save data files in serialised format using the Kryo serialisation library. This code follows the example from @phatak-dev provided [here](http://blog.madhukaraphatak.com/kryo-disk-serialization-in-spark/).
-* convert text files of the formats "libsvm", "comma", and "space" (see examples under [options](#options)) to object files with RDDs containing elements of type 
+* convert text files of the formats "libsvm", "comma", and "space" (see examples under [options](#locosuplibsup-options)) to object files with RDDs containing elements of type 
 	- `DataPoint` (needed for LOCO, see details [below](#datapoint))
 	- [`LabeledPoint`](http://spark.apache.org/docs/1.3.0/api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) (needed for the algorithms provided in Spark's machine learning library MLlib)
 	- `Array[Double]` where the first entry is the response, followed by the features
@@ -229,9 +231,51 @@ case class FeatureVector(index : Int, observations: breeze.linalg.Vector[Double]
 
 ## Example
 
-## Options 
+## preprocessingUtils options 
+
+The following list provides a description of all options that can be provided to the package 'preprocessingUtils'. 
+
+`outdir` Directory where to save the converted data files
+
+`nPartitions` Number of partitions to use
+
+`dataFormat` Can be either "text" or "object"
+
+`textDataFormat` If `dataFormat` is "text", it can have the following formats: "libsvm", "comma", "spaces" (see [here](#locosuplibsup-options) for examples)
+
+`dataFile` Path to the input data file
+
+ `separateTrainTestFiles` True if training and test set are provided in different files
+ 
+`trainingDatafile` If training and test set are provided in different files, path to the training data file
+
+`testDatafile` If training and test set are provided in different files, path to the test data file
+
+`proportionTest` If training and test set are _not_ provided separately, proportion of data set to use for testing
+
+`myseed` Random seed
+
+`outputTrainFileName` File name for file containing the training data
+
+`outputTestFileName` File name for file containing the test data
+
+`outputClass` Specifies the type of the elements in the output RDDs : can be `DataPoint`, `LabeledPoint` or `DoubleArray`
+
+`twoOutputClasses` True if same training/test pair should be saved in two different formats
+
+`secondOutputClass` If `twoOutputClasses` is true, specifies the type of the elements in the corresponding output RDDs 
+
+`centerFeatures` True if features should be centred to have zero mean
+
+`centerResponse` True if response should be centred to have zero mean 
+
+`scaleFeatures` True if features should be scaled to have unit variance
+
+`scaleResponse` True if response should be scaled to have unit variance
 
 # Recommended Spark settings
+Note that the benefit of some of these setting highly depends on the particular architecture you will be using, i.e. we cannot guarantee that they will yield optimal performance of LOCO.
+
 * Use Kryo serialisation
  {% highlight bash %}
 --conf "spark.serializer=org.apache.spark.serializer.KryoSerializer" 
