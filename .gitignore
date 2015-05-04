@@ -1,0 +1,10 @@
+*.xml
+*.class
+*.cache
+*.css
+*.xsl
+
+preprocessingUtils/project/target
+preprocessingUtils/target
+preprocessingUtils/output
+preprocessingUtils/.idea
