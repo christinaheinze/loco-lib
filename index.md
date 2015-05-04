@@ -6,7 +6,7 @@ NOTE: THIS PAGE IS STILL UNDER DEVELOPMENT AND THE SOFTWARE HAS NOT BEEN PUBLISH
 
 # Problem setting
 
-LOCO is a LOw-COmmunication distributed algorithm for \\( \ell_2 \\) - penalised convex estimation problems of the form
+Given a data matrix \\( \mathbf{X} \in \mathbb{R}^{n\times p} \\) and response \\( \mathbf{y} \in \mathbb{R}^n \\), LOCO is a LOw-COmmunication distributed algorithm for \\( \ell_2 \\) - penalised convex estimation problems of the form
 
 \\[ \min_{\boldsymbol{\beta}} J(\boldsymbol{\beta}) = \frac{1}{n} \sum\_{i=1}^n f_i(\boldsymbol{\beta}^\top \mathbf{x}_i) + \frac{\lambda}{2} \Vert \boldsymbol{\beta} \Vert^2_2 \\]
 
@@ -72,7 +72,8 @@ target/scala-2.10/LOCO-assembly-0.1.jar \
 --CVKind=none \
 --lambda=70 \
 --nFeatsProj=260 \
---nPartitions=4
+--nPartitions=4 \
+--nExecutors=1
 	
 {% endhighlight %}
 
@@ -82,31 +83,34 @@ The estimated coefficients can be plotted as follows as each feature corresponds
 
 ## SVM
 
-To train a binary SVM with hinge loss locally on the classification data set provided in the `data` directory, run:
+To train a binary SVM with hinge loss locally on the 'dogs vs. cats' classification data set provided in the `data` directory, run:
 {% highlight bash %}
 spark-1.3.0/bin/spark-submit \
-	--class "LOCO.driver" \
-	--master local[4] \
-	target/scala-2.10/LOCO-assembly-0.1.jar \
-	--classification=true \
-	--optimizer=SDCA
-	--numIterations=15000 \
-	--dataFormat=object \
-	--separateTrainTestFiles=true \
-	--trainingDatafile="data/" \
-	--testDatafile="data/" \
-	--center=false \
-	--centerFeaturesOnly=false \ 
-	--Proj=sparse \ 
-	--concatenate=false \
-	--CVKind=global \
-	--lambda=150 \
-	--kfold=2 \
-	--nFeatsProj=7188 \
-	--lambdaSeqFrom=130 \
-	--lambdaSeqTo=140 \
-	--lambdaSeqBy=.1 \
-	--nPartitions=24
+--class "LOCO.driver" \
+--master local[4] \
+--driver-memory 1G \
+--executor-memory 1G \
+--conf "spark.serializer=org.apache.spark.serializer.KryoSerializer" \
+--conf "spark.kryoserializer.buffer.max.mb=512" \
+--conf "spark.executor.extraJavaOptions=-XX:+UseG1GC" \
+--conf "spark.driver.maxResultSize=512m" \
+target/scala-2.10/LOCO-assembly-csc-unserialized-0.1.jar \
+--classification=true \
+--optimizer=SDCA \
+--numIterations=5000 \
+--dataFormat=text \
+--textDataFormat=spaces \
+--separateTrainTestFiles=false \
+--dataFile="data/dogs_vs_cats_n5000.txt" \
+--center=false \
+--centerFeaturesOnly=true \
+--Proj=sparse \
+--concatenate=false \
+--CVKind=global \
+--lambda=0.2 \
+--nFeatsProj=200 \
+--nPartitions=4 \
+--nExecutors=1
 {% endhighlight %}
 
 
@@ -119,6 +123,8 @@ The following list provides a description of all options that can be provided to
 `saveToHDFS` True if output should be saved on HDFS
 
 `nPartitions` Number of blocks to partition the design matrix 
+
+`nExecutors` Number of executors used. This information will be used to determine the tree depth in [`treeReduce`](http://spark.apache.org/docs/1.3.1/api/scala/index.html#org.apache.spark.rdd.RDD) when the random projections are added. A binary tree structure is used to minimise the memory requirements. 
 
 `dataFormat` Can be either "text" or "object"
 
