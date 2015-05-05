@@ -4,7 +4,13 @@
 *.css
 *.xsl
 
+LOCO/project/target
+LOCO/target
+LOCO/output
+LOCO/.idea
+
 preprocessingUtils/project/target
 preprocessingUtils/target
 preprocessingUtils/output
 preprocessingUtils/.idea
+
