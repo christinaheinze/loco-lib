@@ -53,7 +53,7 @@ Once the first version of LOCO will have been published, the binaries will be av
 
 To run ridge regression locally on the 'climate' regression data set provided in the `data` directory, run:
 {% highlight bash %}
-spark-1.3.0/bin/spark-submit \
+$SPARK_HOME/bin/spark-submit \
 --class "LOCO.driver" \
 --master local[4] \
 --driver-memory 1G \
@@ -67,7 +67,7 @@ target/scala-2.10/LOCO-assembly-0.1.jar \
 --trainingDatafile="../data/climate_train.txt" \
 --testDatafile="../data/climate_test.txt" \
 --center=true \
---Proj=sparse \
+--projection=sparse \
 --concatenate=true \
 --CVKind=none \
 --lambda=70 \
@@ -85,28 +85,23 @@ The estimated coefficients can be plotted as follows as each feature corresponds
 
 To train a binary SVM with hinge loss locally on the 'dogs vs. cats' classification data set provided in the `data` directory, run:
 {% highlight bash %}
-spark-1.3.0/bin/spark-submit \
+$SPARK_HOME/bin/spark-submit \
 --class "LOCO.driver" \
 --master local[4] \
 --driver-memory 1G \
---executor-memory 1G \
---conf "spark.serializer=org.apache.spark.serializer.KryoSerializer" \
---conf "spark.kryoserializer.buffer.max.mb=512" \
---conf "spark.executor.extraJavaOptions=-XX:+UseG1GC" \
---conf "spark.driver.maxResultSize=512m" \
-target/scala-2.10/LOCO-assembly-csc-unserialized-0.1.jar \
+target/scala-2.10/LOCO-assembly-0.1.jar \
 --classification=true \
 --optimizer=SDCA \
 --numIterations=5000 \
 --dataFormat=text \
 --textDataFormat=spaces \
 --separateTrainTestFiles=false \
---dataFile="data/dogs_vs_cats_n5000.txt" \
+--dataFile="../data/dogs_vs_cats_n5000.txt" \
 --center=false \
 --centerFeaturesOnly=true \
---Proj=sparse \
+--projection=sparse \
 --concatenate=false \
---CVKind=global \
+--CVKind=none \
 --lambda=0.2 \
 --nFeatsProj=200 \
 --nPartitions=4 \
@@ -236,6 +231,35 @@ case class FeatureVector(index : Int, observations: breeze.linalg.Vector[Double]
 {% endhighlight %}
 
 ## Example
+To use the preprocessing package
+
+- to center and scale the features
+- to split one data set into separate training and test sets
+- to save the data sets as object files using Kryo serialisation 
+
+change into the corresponding directory with `cd loco-lib/preprocessingUtils` and run:
+
+{% highlight bash %}
+$SPARK_HOME/bin/spark-submit \
+--class "preprocessingUtils.main" \
+--master local[4] \
+target/scala-2.10/preprocess-assembly-0.1.jar \
+--dataFormat=text \
+--textDataFormat=spaces \
+--separateTrainTestFiles=false \
+--dataFile="../data/dogs_vs_cats_n5000.txt" \
+--proportionTest=0.2 \
+--centerFeatures=true \
+--scaleFeatures=true \
+--centerResponse=false \
+--scaleResponse=false \
+--outputTrainFileName="../data/dogs_vs_cats_n5000_train_" \
+--outputTestFileName="../data/dogs_vs_cats_n5000_test_" \
+--outputClass=DataPoint \
+--twoOutputClasses=true \
+--secondOutputClass=LabeledPoint
+	
+{% endhighlight %}
 
 ## preprocessingUtils options 
 
@@ -251,7 +275,7 @@ The following list provides a description of all options that can be provided to
 
 `dataFile` Path to the input data file
 
- `separateTrainTestFiles` True if training and test set are provided in different files
+ `separateTrainTestFiles` True if (input) training and test set are provided in different files
  
 `trainingDatafile` If training and test set are provided in different files, path to the training data file
 
