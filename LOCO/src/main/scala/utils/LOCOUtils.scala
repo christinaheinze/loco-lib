@@ -94,7 +94,7 @@ object LOCOUtils {
       }
 
     if (classification)
-      println("Misclassification Error = " + MSE_train)
+      println("Misclassification error on training set = " + MSE_train)
     else
       println("Training Mean Squared Error = " + MSE_train)
 
@@ -108,7 +108,7 @@ object LOCOUtils {
       }
 
     if(classification)
-      println("Misclassification Error = " + MSE_test)
+      println("Misclassification error on test set = " + MSE_test)
     else
       println("Test Mean Squared Error = " + MSE_test)
 

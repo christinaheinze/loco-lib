@@ -22,7 +22,7 @@ resolvers ++= Seq(
 )
 
 // Configure jar named used with the assembly plug-in
-assemblyJarName in assembly := "LOCO-assembly-unserialized-disk-depth-0.1.jar"
+assemblyJarName in assembly := "LOCO-assembly-0.1.jar"
 
 // assembly merge strategy
 assemblyMergeStrategy in assembly := {
