@@ -48,7 +48,7 @@ Once the first version of LOCO will have been published, the binaries will be av
 
 **Dependencies**
 
-We provide two different random projections -- "sparse" and the discrete cosine transform "DCT". The latter depends on [FFTW](http://www.fftw.org/) which needs to be preinstalled on all worker nodes. Also note that FFTW is not thread-safe which may cause problems depending on the cluster architecture used. Therefore, we currently recommend to use the option "sparse". We aim to add more documentation on how to use the DCT in the future.
+We provide two different random projections -- "sparse" and the subsampled randomised discrete cosine transform "SDCT". The latter depends on [FFTW](http://www.fftw.org/) which needs to be preinstalled on all worker nodes. Also note that FFTW is not thread-safe which may cause problems depending on the cluster architecture used. Therefore, we currently recommend to use the option "sparse". We aim to add more documentation on how to use the DCT in the future.
 
 # Examples
 
@@ -178,7 +178,7 @@ The following list provides a description of all options that can be provided to
 
 `centerFeaturesOnly` True if only the features should be centred (e.g. for classification)
 
-`projection` Random projection to use: can be either "sparse" or "DCT". The latter depends on FFTW, see [Dependencies](#obtaining-the-software).
+`projection` Random projection to use: can be either "sparse" or "SDCT". The latter depends on FFTW, see [Dependencies](#obtaining-the-software).
 
 `nFeatsProj` Projection dimension 
 
