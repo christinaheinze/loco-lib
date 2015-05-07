@@ -56,7 +56,7 @@ object ProjectionUtils {
     // compute random projections and return resulting RDD
     localMats.mapValues{case(colIndices, rawFeats) =>
       val RP = projection match{
-        case "SRHT" => SRHT(rawFeats, nFeatsProj, seed)
+        case "SDCT" => SDCT(rawFeats, nFeatsProj, seed)
         case "sparse" => rawFeats * sparseProjMat(rawFeats.cols, nFeatsProj, seed)
         case _ => throw new IllegalArgumentException("Invalid argument for Proj : " + projection)
       }
@@ -269,7 +269,7 @@ object ProjectionUtils {
   }
 
   /**
-   * Computes the SRHT of input matrix.
+   * Computes the subsampled randomized DCT of input matrix.
    *
    * @param dataMat Input matrix
    * @param nProjDim Projection dimension
@@ -278,7 +278,7 @@ object ProjectionUtils {
    *
    * @return Projected input matrix
    */
-  def SRHT(
+  def SDCT(
       dataMat : DenseMatrix[Double],
       nProjDim : Int,
       seed : Int,
@@ -292,7 +292,7 @@ object ProjectionUtils {
     // dimension to be compressed
     val dim = if(cols) p else n
 
-    // compute SRHT constant
+    // compute scaling factor
     val srhtConst = math.sqrt(dim / nProjDim.toDouble)
 
     // sample from Rademacher distribution and compute diagonal

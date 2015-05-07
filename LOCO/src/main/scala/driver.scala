@@ -84,7 +84,7 @@ object driver {
     val center = options.getOrElse("center", "true").toBoolean
     // center features only
     val centerFeaturesOnly = options.getOrElse("centerFeaturesOnly", "false").toBoolean
-    // specify projection (sparse or SRHT)
+    // specify projection (sparse or SDCT)
     val projection = options.getOrElse("projection", "sparse")
     // specify projection dimension
     val nFeatsProj = options.getOrElse("nFeatsProj", "260").toInt
