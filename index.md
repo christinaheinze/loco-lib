@@ -2,8 +2,6 @@
 layout: dis_template
 ---
 
-NOTE: THIS PAGE IS STILL UNDER DEVELOPMENT AND THE SOFTWARE HAS NOT BEEN PUBLISHED
-
 # Problem setting
 
 Given a data matrix \\( \mathbf{X} \in \mathbb{R}^{n\times p} \\) and response \\( \mathbf{y} \in \mathbb{R}^n \\), LOCO is a LOw-COmmunication distributed algorithm for \\( \ell_2 \\) - penalised convex estimation problems of the form
@@ -47,11 +45,17 @@ To install `sbt` on Mac OS X using [Homebrew](http://brew.sh/), run `brew instal
 
 Once the first version of LOCO will have been published, the binaries will be available on the [releases](https://github.com/christinaheinze/loco-lib/releases) page. 
 
+
+**Dependencies**
+
+We provide two different random projections -- "sparse" and the discrete cosine transform "DCT". The latter depends on [FFTW](http://www.fftw.org/) which needs to be preinstalled on all worker nodes. Also note that FFTW is not thread-safe which may cause problems depending on the cluster architecture used. Therefore, we currently recommend to use the option "sparse". We aim to add more documentation on how to use the DCT in the future.
+
 # Examples
 
 ## Ridge Regression
 
-To run ridge regression locally on the 'climate' regression data set provided in the `data` directory, run:
+To run ridge regression locally on the 'climate' regression data set provided in the `data` directory, download a [pre-build binary package of Spark](http://spark.apache.org/downloads.html), set `SPARK_HOME` to the location of the Spark folder and run:
+
 {% highlight bash %}
 $SPARK_HOME/bin/spark-submit \
 --class "LOCO.driver" \
@@ -174,7 +178,7 @@ The following list provides a description of all options that can be provided to
 
 `centerFeaturesOnly` True if only the features should be centred (e.g. for classification)
 
-`projection` Random projection to use: can be either "sparse" or "SRHT"
+`projection` Random projection to use: can be either "sparse" or "DCT". The latter depends on FFTW, see [Dependencies](#obtaining-the-software).
 
 `nFeatsProj` Projection dimension 
 
