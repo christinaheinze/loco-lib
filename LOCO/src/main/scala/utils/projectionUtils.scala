@@ -16,7 +16,9 @@ object ProjectionUtils {
    * 
    * @param parsedDataByCol Data matrix parsed by column as RDD containing FeatureVectors
    * @param projection Specify which projection shall be used: "sparse" for a sparse random 
-   *                   projection or "SRHT" for the SRHT. Note that the latter is not threadsafe!
+   *                   projection or "SDCT" for the SDCT. Note that the latter is not threadsafe!
+   * @param flagFFTW flag for SDCT/FFTW: 64 corresponds to FFTW_ESTIMATE,
+   *                 0 corresponds to FFTW_MEASURE
    * @param concatenate True if random features should be concatenated.
    *                    When set to false they are added.
    * @param nFeatsProj Dimensionality of the random projection
@@ -31,6 +33,7 @@ object ProjectionUtils {
   def project(
       parsedDataByCol : RDD[FeatureVector],
       projection : String,
+      flagFFTW : Int,
       concatenate : Boolean,
       nFeatsProj : Int,
       nObs : Int,
@@ -56,9 +59,9 @@ object ProjectionUtils {
     // compute random projections and return resulting RDD
     localMats.mapValues{case(colIndices, rawFeats) =>
       val RP = projection match{
-        case "SDCT" => SDCT(rawFeats, nFeatsProj, seed)
+        case "SDCT" => SDCT(rawFeats, nFeatsProj, seed, flagFFTW)
         case "sparse" => rawFeats * sparseProjMat(rawFeats.cols, nFeatsProj, seed)
-        case _ => throw new IllegalArgumentException("Invalid argument for Proj : " + projection)
+        case _ => throw new IllegalArgumentException("Invalid argument for projection : " + projection)
       }
       (colIndices, rawFeats, RP)
     }
@@ -228,6 +231,8 @@ object ProjectionUtils {
    * @param nProjDim Projection dimension
    * @param diagonal
    * @param cols Column-wise projection if cols is set to true, otherwise row-wise projection
+   * @param flagFFTW flag for SDCT/FFTW: 64 corresponds to FFTW_ESTIMATE,
+   *                 0 corresponds to FFTW_MEASURE
    *
    * @return Projected input matrix
    */
@@ -235,7 +240,8 @@ object ProjectionUtils {
       dataMat : DenseMatrix[Double],
       nProjDim : Int,
       diagonal : DenseVector[Double],
-      cols : Boolean) : DenseMatrix[Double] = {
+      cols : Boolean,
+      flagFFTW : Int) : DenseMatrix[Double] = {
 
     // transpose X if needed
     val X = if(cols) dataMat.t.toDenseMatrix else dataMat
@@ -249,7 +255,7 @@ object ProjectionUtils {
 
     // initializations
     val dim = Array(n, 1)
-    val fft = new FFTReal(dim)
+    val fft = new FFTReal(dim, flags = flagFFTW)
     var ArrayOfFeatureVecs = new ArrayBuffer[Array[Double]]()
 
     // transform
@@ -274,6 +280,8 @@ object ProjectionUtils {
    * @param dataMat Input matrix
    * @param nProjDim Projection dimension
    * @param seed Random seed
+   * @param flagFFTW flag for SDCT/FFTW: 64 corresponds to FFTW_ESTIMATE,
+   *                 0 corresponds to FFTW_MEASURE
    * @param cols Column-wise projection if cols is set to true, otherwise row-wise projection
    *
    * @return Projected input matrix
@@ -282,6 +290,7 @@ object ProjectionUtils {
       dataMat : DenseMatrix[Double],
       nProjDim : Int,
       seed : Int,
+      flagFFTW : Int,
       cols : Boolean = true) : DenseMatrix[Double]= {
 
     // number of observations
@@ -300,7 +309,7 @@ object ProjectionUtils {
     val D = DenseVector.tabulate(dim){i => sample(dist)} * srhtConst
 
     // compute the DCT
-    val res = DCT(dataMat, nProjDim, D, cols)
+    val res = DCT(dataMat, nProjDim, D, cols, flagFFTW)
 
     // subsample
     val subsampledIndices = util.Random.shuffle(List.fill(1)(0 until dim).flatten).take(nProjDim)

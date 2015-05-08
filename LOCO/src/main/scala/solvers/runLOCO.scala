@@ -30,8 +30,10 @@ object runLOCO {
    * @param nExecutors Number of executors used - needed to set the tree depth in treeReduce when
    *                   aggregating the random features.
    * @param projection Specify which projection shall be used: "sparse" for a sparse
-   *                   random projection or "SRHT" for the SRHT. Note that the latter is not
+   *                   random projection or "SDCT" for the SDCT. Note that the latter is not
    *                   threadsafe!
+   * @param flagFFTW flag for SDCT/FFTW: 64 corresponds to FFTW_ESTIMATE,
+   *                 0 corresponds to FFTW_MEASURE
    * @param concatenate True if random features should be concatenated.
    *                    When set to false they are added.
    * @param nFeatsProj Dimensionality of the random projection
@@ -67,6 +69,7 @@ object runLOCO {
       nPartitions : Int,
       nExecutors : Int,
       projection : String,
+      flagFFTW : Int,
       concatenate : Boolean,
       nFeatsProj : Int,
       lambda : Double,
@@ -100,7 +103,7 @@ object runLOCO {
 
     // project local matrices
     val rawAndRandomFeats =
-      project(parsedDataByCol, projection, concatenate, nFeatsProj, nObs, nFeats,
+      project(parsedDataByCol, projection, flagFFTW, concatenate, nFeatsProj, nObs, nFeats,
         myseed, nPartitions)
 
     // force evaluation of rawAndRandomFeats RDD and unpersist parsedDataByCol

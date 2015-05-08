@@ -32,7 +32,9 @@ object CVUtils {
    * @param nExecutors Number of executors used - needed to set the tree depth in treeReduce when
    *                   aggregating the random features.
    * @param projection Specify which projection shall be used: "sparse" for a sparse random
-   *                   projection or "SRHT" for the SRHT. Note that the latter is not threadsafe!
+   *                   projection or "SDCT" for the SDCT. Note that the latter is not threadsafe!
+   * @param flagFFTW flag for SDCT/FFTW: 64 corresponds to FFTW_ESTIMATE,
+   *                 0 corresponds to FFTW_MEASURE
    * @param concatenate True if random features should be concatenated.
    *                    When set to false they are added.
    * @param nFeatsProj Dimensionality of the random projection
@@ -62,6 +64,7 @@ object CVUtils {
       nPartitions : Int,
       nExecutors : Int,
       projection : String,
+      flagFFTW : Int,
       concatenate : Boolean,
       nFeatsProj : Int,
       lambdaSeq : Seq[Double],
@@ -89,7 +92,7 @@ object CVUtils {
           val (lambdasAndCoefficientVectorsMap, colMeans, meanResponse) =
             runForLambdaSequence(
               sc, classification, seed, training, center, centerFeaturesOnly, nPartitions,
-              nExecutors, projection, concatenate, nFeatsProj, lambdaSeq, optimizer,
+              nExecutors, projection, flagFFTW, concatenate, nFeatsProj, lambdaSeq, optimizer,
               numIterations, checkDualityGap, stoppingDualityGap)
 
           // collect lambda with coefficients as map
@@ -162,7 +165,9 @@ object CVUtils {
    * @param centerFeaturesOnly True if only the features but not the response should be centered.
    * @param nPartitions Number of partitions to use to split the data matrix across columns.
    * @param projection Specify which projection shall be used: "sparse" for a sparse random
-   *                   projection or "SRHT" for the SRHT. Note that the latter is not threadsafe!
+   *                   projection or "SDCT" for the SDCT. Note that the latter is not threadsafe!
+   * @param flagFFTW flag for SDCT/FFTW: 64 corresponds to FFTW_ESTIMATE,
+   *                 0 corresponds to FFTW_MEASURE
    * @param concatenate True if random features should be concatenated.
    *                    When set to false they are added.
    * @param nFeatsProj Dimensionality of the random projection
@@ -192,6 +197,7 @@ object CVUtils {
       nPartitions : Int,
       nExecutors : Int,
       projection : String,
+      flagFFTW : Int,
       concatenate : Boolean,
       nFeatsProj : Int,
       lambdaSeq : Seq[Double],
@@ -219,7 +225,7 @@ object CVUtils {
 
     // project local matrices
     val rawAndRandomFeats =
-      project(parsedDataByCol, projection, concatenate, nFeatsProj, nObs, nFeats,
+      project(parsedDataByCol, projection, flagFFTW, concatenate, nFeatsProj, nObs, nFeats,
         myseed, nPartitions)
 
     rawAndRandomFeats.persist(StorageLevel.MEMORY_AND_DISK_SER)

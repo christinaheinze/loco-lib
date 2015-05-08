@@ -52,6 +52,7 @@ object LOCOUtils {
      nExecutors : Int,
      nFeatsProj : Int,
      projection : String,
+     flagFFTW : Int,
      concatenate : Boolean,
      lambda : Double,
      CVKind : String,
@@ -164,7 +165,8 @@ object LOCOUtils {
     build.append("\ncenter:                  " + center)
     build.append("\ncenterFeaturesOnly:      " + centerFeaturesOnly)
 
-    build.append("\nProj:                    " + projection)
+    build.append("\nProjection:              " + projection)
+    build.append("\nflagFFTW:                " + flagFFTW)
     build.append("\nnFeatsProj:              " + nFeatsProj)
     build.append("\nconcatenate:             " + concatenate)
     build.append("\nCVKind:                  " + CVKind)

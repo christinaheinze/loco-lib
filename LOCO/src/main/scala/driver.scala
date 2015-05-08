@@ -1,6 +1,7 @@
 package LOCO
 
 
+import fftw3.FFTW3Library
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -86,6 +87,8 @@ object driver {
     val centerFeaturesOnly = options.getOrElse("centerFeaturesOnly", "false").toBoolean
     // specify projection (sparse or SDCT)
     val projection = options.getOrElse("projection", "sparse")
+    // specify flag for SDCT/FFTW: 64 corresponds to FFTW_ESTIMATE, 0 corresponds to FFTW_MEASURE
+    val flagFFTW = options.getOrElse("flagFFTW", "64").toInt
     // specify projection dimension
     val nFeatsProj = options.getOrElse("nFeatsProj", "260").toInt
     // concatenate or add
@@ -204,7 +207,7 @@ object driver {
       if(CVKind == "global"){
         CVUtils.globalCV(
           sc, classification, myseed, training,  center, centerFeaturesOnly, nPartitions,
-          nExecutors, projection, concatenate, nFeatsProj, lambdaSeq, kfold, optimizer,
+          nExecutors, projection, flagFFTW, concatenate, nFeatsProj, lambdaSeq, kfold, optimizer,
           numIterations, checkDualityGap, stoppingDualityGap)
       }else{
         lambda
@@ -214,8 +217,8 @@ object driver {
     val (betaLoco, startTime, colMeans, meanResponse) =
       runLOCO.run(
         sc, classification, myseed, training, center, centerFeaturesOnly, nPartitions, nExecutors,
-        projection, concatenate, nFeatsProj, lambdaGlobal, CVKind, lambdaSeq, kfold,  optimizer,
-        numIterations, checkDualityGap, stoppingDualityGap)
+        projection, flagFFTW, concatenate, nFeatsProj, lambdaGlobal, CVKind, lambdaSeq, kfold,
+        optimizer, numIterations, checkDualityGap, stoppingDualityGap)
 
     // get second timestamp needed to time LOCO and compute time difference
     val endTime = System.currentTimeMillis
@@ -226,8 +229,8 @@ object driver {
       sc, classification, optimizer, numIterations, startTime, runTime,
       betaLoco, training, test, center, centerFeaturesOnly, meanResponse, colMeans, dataFormat,
       separateTrainTestFiles, trainingDatafile, testDatafile, dataFile, proportionTest, nPartitions,
-      nExecutors, nFeatsProj, projection, concatenate, lambda, CVKind, lambdaSeq, kfold, myseed,
-      lambdaGlobal, checkDualityGap, stoppingDualityGap, saveToHDFS, directoryNameResultsFolder)
+      nExecutors, nFeatsProj, projection, flagFFTW, concatenate, lambda, CVKind, lambdaSeq, kfold,
+      myseed, lambdaGlobal, checkDualityGap, stoppingDualityGap, saveToHDFS, directoryNameResultsFolder)
 
     // compute end time of application and compute time needed overall
     val globalEndTime = System.currentTimeMillis
