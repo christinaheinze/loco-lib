@@ -43,7 +43,7 @@ object ProjectionUtils {
 
     // check whether projection dimension has been chosen smaller 
     // than number of raw features per worker
-    if(concatenate){
+    if(concatenate || projection == "SDCT"){
       assert(isValidProjectionDim(nFeatsProj, nPartitions, nFeats),
         "Projection Dimension needs to be smaller than number of raw features " +
           "per partition (= number of features / number of partitions)")
@@ -74,7 +74,7 @@ object ProjectionUtils {
    *                        the raw feature matrix as value.
    * @param randomProjectionMap Map containing the random projection of the remaining partitions.
    * @param concatenate If true, random projections are concatenated, otherwise they are added.
-   * 
+   *
    * @return Returns DenseMatrix with random features as they'll enter in the local design matrix.
    */
   def randomFeaturesConcatenateOrAddAtWorker(
@@ -99,7 +99,7 @@ object ProjectionUtils {
    * @param matrixWithIndex Tuple containing the partition ID as key, and the column indices, 
    *                        the raw feature matrix and the random feature matrix as value.
    * @param randomProjectionsAdded DenseMatrix containing the sum of all random projections.
-   *                               
+   *
    * @return Returns DenseMatrix with random features as they'll enter in the local design matrix.
    */
   def randomFeaturesSubtractLocal(
@@ -113,7 +113,7 @@ object ProjectionUtils {
    * 
    * @param randomProjectionMap Map containing the random projections from the other partitions.
    * @param concatenate If true, random projections are concatenated, otherwise they are added.
-   *                    
+   *
    * @return Returns DenseMatrix with random features as they'll enter in the local design matrix.
    */
   def aggregationOfRPs(
@@ -243,34 +243,35 @@ object ProjectionUtils {
       cols : Boolean,
       flagFFTW : Int) : DenseMatrix[Double] = {
 
-    // transpose X if needed
-    val X = if(cols) dataMat.t.toDenseMatrix else dataMat
-
-    // extract n and p of (possibly transposed) input matrix
-    val n = X.rows
-    val p = X.cols
+    // extract the dimension of the vectors that should be transformed
+    // and the number of vectors that should be transformed
+    val dimOfVecsToTransform = if(cols) dataMat.cols else dataMat.rows
+    val nVecsToTransform = if(cols) dataMat.rows else dataMat.cols
 
     // scaling
-    val scale = 1 / math.sqrt(2 * n)
+    val scale = 1 / math.sqrt(2 * dimOfVecsToTransform)
 
     // initializations
-    val dim = Array(n, 1)
+    val dim = Array(dimOfVecsToTransform, 1)
     val fft = new FFTReal(dim, flags = flagFFTW)
     var ArrayOfFeatureVecs = new ArrayBuffer[Array[Double]]()
 
     // transform
-    for(i <- 0 until p){
-      val vec = (diagonal :* X(::, i).toDenseVector * scale).toArray
+    for(i <- 0 until nVecsToTransform){
+      val vec : Array[Double] =
+            if(cols) (diagonal :* dataMat(i, ::).t * scale).toArray
+            else (diagonal :* dataMat(::, i) * scale).toArray
+
       var dest = fft.allocFourierArray()
       fft.forwardTransform(vec, dest)
-      ArrayOfFeatureVecs += dest.slice(0, n)
+      ArrayOfFeatureVecs += dest.slice(0, dimOfVecsToTransform)
     }
 
     // transpose back if needed
     if(cols){
-      new DenseMatrix(n, p, ArrayOfFeatureVecs.toArray.flatten).t
+      new DenseMatrix(dimOfVecsToTransform, nVecsToTransform, ArrayOfFeatureVecs.toArray.flatten).t
     }else{
-      new DenseMatrix(n, p, ArrayOfFeatureVecs.toArray.flatten)
+      new DenseMatrix(dimOfVecsToTransform, nVecsToTransform, ArrayOfFeatureVecs.toArray.flatten)
     }
   }
 
@@ -309,23 +310,18 @@ object ProjectionUtils {
     val D = DenseVector.tabulate(dim){i => sample(dist)} * srhtConst
 
     // compute the DCT
-    val res = DCT(dataMat, nProjDim, D, cols, flagFFTW)
+    var res = DCT(dataMat, nProjDim, D, cols, flagFFTW)
 
     // subsample
     val subsampledIndices = util.Random.shuffle(List.fill(1)(0 until dim).flatten).take(nProjDim)
 
-    // choose subsampled columns
-    var ArrayOfChosenFeatureVecs = new ArrayBuffer[Array[Double]]()
-    for(i <- 0 until subsampledIndices.size){
-      if(cols) ArrayOfChosenFeatureVecs += res(::, subsampledIndices(i)).toArray
-      else ArrayOfChosenFeatureVecs += res(subsampledIndices(i), ::).t.toArray
-    }
+    res = res(::, subsampledIndices).toDenseMatrix
 
     // transpose back if needed
     if(cols){
-      new DenseMatrix(n, nProjDim, ArrayOfChosenFeatureVecs.toArray.flatten)
+      res
     }else{
-      new DenseMatrix(p, nProjDim, ArrayOfChosenFeatureVecs.toArray.flatten).t
+      res.t
     }
   }
 

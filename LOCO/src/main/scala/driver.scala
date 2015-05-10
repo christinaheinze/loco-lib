@@ -1,7 +1,6 @@
 package LOCO
 
 
-import fftw3.FFTW3Library
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkConf, SparkContext}
 
@@ -140,6 +139,7 @@ object driver {
     println("center:                     " + center)
     println("centerFeaturesOnly:         " + centerFeaturesOnly)
     println("projection:                 " + projection)
+    println("flagFFTW:                   " + flagFFTW)
     println("nFeatsProj:                 " + nFeatsProj)
     println("concatenate:                " + concatenate)
     println("CVKind:                     " + CVKind)

@@ -1,6 +1,6 @@
 package LOCO.utils
 
-import breeze.linalg.{DenseVector, Vector}
+import breeze.linalg.Vector
 import scala.collection.Seq
 
 import org.apache.spark.storage.StorageLevel
@@ -77,7 +77,8 @@ object CVUtils {
     // create k training and test set pairs
     val kTrainingAndTestSets =
       MLUtils.kFold(data, k, seed).map{case (train, test) =>
-        (train.persist(StorageLevel.MEMORY_ONLY_SER), test.persist(StorageLevel.MEMORY_ONLY_SER))
+        (train.persist(StorageLevel.MEMORY_AND_DISK),
+          test.persist(StorageLevel.MEMORY_AND_DISK))
       }
 
     // compute performance of lambda values for each training and test set
@@ -95,9 +96,6 @@ object CVUtils {
               nExecutors, projection, flagFFTW, concatenate, nFeatsProj, lambdaSeq, optimizer,
               numIterations, checkDualityGap, stoppingDualityGap)
 
-          // collect lambda with coefficients as map
-//          val lambdasAndCoefficientVectorsMap = lambdasAndCoefficientVectors.collectAsMap()
-
           // broadcast column means if features should be centered
           val colMeansBroadcast = if(center || centerFeaturesOnly) sc.broadcast(colMeans) else null
 
@@ -111,7 +109,7 @@ object CVUtils {
             else{
               elem
             }
-          }.persist(StorageLevel.MEMORY_ONLY_SER)
+          }.persist(StorageLevel.MEMORY_AND_DISK)
 
           // compute MSEs
           val performance =
@@ -228,7 +226,7 @@ object CVUtils {
       project(parsedDataByCol, projection, flagFFTW, concatenate, nFeatsProj, nObs, nFeats,
         myseed, nPartitions)
 
-    rawAndRandomFeats.persist(StorageLevel.MEMORY_AND_DISK_SER)
+    rawAndRandomFeats.persist(StorageLevel.MEMORY_AND_DISK)
 
     // if random projection are to be concatenated, broadcast random projections
     val randomProjectionsConcatenated =
