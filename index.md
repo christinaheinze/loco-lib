@@ -23,7 +23,7 @@ LOCO proceeds as follows. As a preprocessing step, the features need to be distr
 
 LOCO's distribution scheme is illustrated in the following figure.
 
-![LOCO]({{ site.baseurl }}/images/locoscheme.png)
+![LOCO]({{ site.baseurl }}/images/locoscheme2.png)
 
 # Obtaining the software
 
@@ -48,7 +48,12 @@ Once the first version of LOCO will have been published, the binaries will be av
 
 **Dependencies**
 
-We provide two different random projections -- "sparse" and the subsampled randomised discrete cosine transform "SDCT". The latter depends on [FFTW](http://www.fftw.org/) which needs to be preinstalled on all worker nodes. Also note that FFTW is not thread-safe which may cause problems depending on the cluster architecture used. Therefore, we currently recommend to use the option "sparse". We aim to add more documentation on how to use the DCT in the future.
+We provide two different random projections -- "sparse" and the subsampled randomised discrete cosine transform "SDCT". The latter depends on [FFTW](http://www.fftw.org/) which is not thread-safe which may cause problems depending on the cluster architecture used. Therefore, we currently recommend to use the option "sparse". 
+If you choose to use the SDCT, FFTW must be preinstalled on all worker nodes and you must add the path via the `conf` option `spark.executor.extraLibraryPath`. For instance, 
+{% highlight bash %}
+--conf "spark.executor.extraLibraryPath=/cluster/apps/fftw/3.3.3/x86_64/gcc_4.4.6/serial/lib64/" 
+{% endhighlight %}
+Note that this is not necessary if you only use the sparse random projection.
 
 # Examples
 
@@ -180,9 +185,11 @@ The following list provides a description of all options that can be provided to
 
 `projection` Random projection to use: can be either "sparse" or "SDCT". The latter depends on FFTW, see [Dependencies](#obtaining-the-software).
 
+`flagFFTW` Flag for how FFTW should be executed: 64 corresponds to FFTW_ESTIMATE, 0 corresponds to FFTW_MEASURE. For details, see the FFTW documentation on [Planner Flags](http://www.fftw.org/doc/Planner-Flags.html).
+
 `nFeatsProj` Projection dimension 
 
-`concatenate` True is random projections should be concatenated, otherwise they are added
+`concatenate` True is random projections should be concatenated, otherwise they are added. The latter is more memory efficient.
 
 `CVKind` Can be either "global", "local", or "none"
 
@@ -202,13 +209,14 @@ The following list provides a description of all options that can be provided to
 
 ## Choosing the projection dimension
 
-The smallest possible projection dimension depends on the rank of the data matrix \\( \boldsymbol{X} \\). If you expect your data to be low-rank so that LOCO is suitable, we recommend using a projection dimension of about 10% of the number of features you are compressing. The latter depends on whether you choose to add or to concatenate the random features. This projection dimension should be used as a starting point, of course you can test whether your data set allows for a larger degree of compression by tuning the projection dimension together with the regularisation parameter \\( \lambda \\).
+The smallest possible projection dimension depends on the rank of the data matrix \\( \boldsymbol{X} \\). If you expect your data to be low-rank so that LOCO is suitable, we recommend using a projection dimension of about 10% of the number of features you are compressing. The latter depends on whether you choose to add or to concatenate the random features. This projection dimension should be used as a starting point. Of course you can test whether your data set allows for a larger degree of compression by tuning the projection dimension together with the regularisation parameter \\( \lambda \\).
 	
 ### Concatenating the random features
 As described in the original LOCO paper, the first option for collecting the random projections from the other workers is to concatenate them and append these random features to the raw features. More specifically, each worker has \\( \tau = p / K \\) raw features which are compressed to \\( \tau\_{subs} \\) random features. These random features are then communicated and concatenating all random features from the remaining workers results in a dimensionality of the random features of \\( (K-1) \cdot \tau_{subs} \\). Finally, the full local design matrix, consisting of raw and random features, has dimension \\( n \times (\tau + (K-1) \cdot \tau\_{subs}) \\).
 
 ### Adding the random features
-If the projection matrix is a random matrix, e.g. with entries in \\( \( 0, 1, -1\) \\) drawn with probabilities \\( \{ \frac{2}{3}, \frac{1}{6}, \frac{1}{6} \} \\), one can alternatively add the random projections. This is equivalent to projecting all raw features not belonging to worker \\( k \\) at once. If the data set is very low-rank, this scheme may allow for a smaller dimensionality of the random features than concatenation of the random features as we can now project from \\( (p - p/K)\\) to \\( \tau\_{subs} \\) instead of from \\( \tau = p/K \\) to \\( \tau\_{subs} \\).
+If the projection matrix is a random matrix, e.g. with entries in \\( \( 0, 1, -1\) \\) drawn with probabilities \\( \{ \frac{2}{3}, \frac{1}{6}, \frac{1}{6} \} \\), one can alternatively add the random features. This is equivalent to projecting all raw features not belonging to worker \\( k \\) at once. If the data set is very low-rank, this scheme may allow for a smaller dimensionality of the random features than concatenation of the random features as we can now project from \\( (p - p/K)\\) to \\( \tau\_{subs} \\) instead of from \\( \tau = p/K \\) to \\( \tau\_{subs} \\).
+New results suggest that you can also add the random features when using the SDCT. In this case, \\( \tau\_{subs} \\) is required to be smaller than \\(\tau \\).
 
 # Preprocessing package
 The preprocessing package 'preprocessingUtils' can be used to 
