@@ -27,7 +27,7 @@ LOCO's distribution scheme is illustrated in the following figure.
 
 # Obtaining the software
 
-**Option 1 - Build with sbt**
+**Building with sbt**
 
 Checkout the project repository
 
@@ -40,11 +40,6 @@ sbt assembly
 {% endhighlight %}
 
 To install `sbt` on Mac OS X using [Homebrew](http://brew.sh/), run `brew install sbt`. On Ubuntu run `sudo apt-get install sbt`.
-
-**Option 2 - Obtain packaged binaries**
-
-Once the first version of LOCO will have been published, the binaries will be available on the [releases](https://github.com/christinaheinze/loco-lib/releases) page. 
-
 
 **Dependencies**
 
