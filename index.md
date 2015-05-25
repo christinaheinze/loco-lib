@@ -91,7 +91,7 @@ The estimated coefficients can be plotted as follows as each feature corresponds
 
 ## SVM
 
-To train a binary SVM with hinge loss locally on the 'dogs vs. cats' classification data set provided [here]({{ site.baseurl }}/assets/dogs_vs_cats.zip), unzip `dogs_vs_cats.zip` into the `data` directory, run:
+To train a binary SVM with hinge loss locally on the 'dogs vs. cats' classification data set provided [here]({{ site.baseurl }}/assets/dogs_vs_cats.zip), unzip `dogs_vs_cats.zip` into the `data` directory and run:
 {% highlight bash %}
 $SPARK_HOME/bin/spark-submit \
 --class "LOCO.driver" \
