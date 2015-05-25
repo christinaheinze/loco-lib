@@ -50,11 +50,15 @@ If you choose to use the SDCT, FFTW must be preinstalled on all worker nodes and
 {% endhighlight %}
 Note that this is not necessary if you only use the sparse random projection.
 
+**Running on Windows**
+
+To run LOCO locally under Windows, we recommend using Spark 1.3.1, download [winutils.exe](http://public-repo-1.hortonworks.com/hdp-win-alpha/winutils.exe), move it to ``DISK:\FOLDERS\bin\`` and set ``HADOOP_CONF=DISK:\FOLDERS``.
+
 # Examples
 
 ## Ridge Regression
 
-To run ridge regression locally on the 'climate' regression data set provided in the `data` directory, download a [pre-build binary package of Spark](http://spark.apache.org/downloads.html), set `SPARK_HOME` to the location of the Spark folder and run:
+To run ridge regression locally on the 'climate' regression data set provided [here]({{ site.baseurl }}/assets/climate.zip), unzip `climate.zip` into the `data` directory, download a [pre-build binary package of Spark](http://spark.apache.org/downloads.html), set `SPARK_HOME` to the location of the Spark folder and run:
 
 {% highlight bash %}
 $SPARK_HOME/bin/spark-submit \
@@ -87,7 +91,7 @@ The estimated coefficients can be plotted as follows as each feature corresponds
 
 ## SVM
 
-To train a binary SVM with hinge loss locally on the 'dogs vs. cats' classification data set provided in the `data` directory, run:
+To train a binary SVM with hinge loss locally on the 'dogs vs. cats' classification data set provided [here]({{ site.baseurl }}/assets/dogs_vs_cats.zip), unzip `dogs_vs_cats.zip` into the `data` directory, run:
 {% highlight bash %}
 $SPARK_HOME/bin/spark-submit \
 --class "LOCO.driver" \
