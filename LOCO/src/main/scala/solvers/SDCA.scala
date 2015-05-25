@@ -132,7 +132,7 @@ object SDCA {
       // randomly select a local example
       val idx = r.nextInt(n)
       val y = response(idx)
-      val x : breeze.linalg.Vector[Double] = localData(idx, ::).t
+      val x = localData(idx, ::).t
 
       // delta alpha
       val deltaAlpha = (y - (x dot w) - 0.5*alpha(idx))/(0.5 + (x dot x)/(lambda*n))

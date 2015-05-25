@@ -8,8 +8,8 @@ scalaVersion := "2.10.4"
 libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-core" % "1.3.1" % "provided",
   "org.apache.spark"  %% "spark-mllib" % "1.3.1",
-  "org.scalanlp" %% "breeze" % "0.11.1",
-  "org.scalanlp" %% "breeze-natives" % "0.11.1",
+  "org.scalanlp" %% "breeze" % "0.11.2",
+  "org.scalanlp" %% "breeze-natives" % "0.11.2",
   "cc.factorie" % "factorie_2.10" % "1.1.1",
   "com.github.fommil.netlib" % "all" % "1.1.2",
   "com.nativelibs4java" % "jnaerator" % "0.11",
