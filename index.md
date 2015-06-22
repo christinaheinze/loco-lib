@@ -2,6 +2,8 @@
 layout: dis_template
 ---
 
+LOCO<sup>lib</sup> implements the [LOCO](http://arxiv.org/abs/1406.3469) and [DUAL-LOCO](http://arxiv.org/abs/1506.02554) algorithms for distributed statistical estimation.
+
 # Problem setting
 
 Given a data matrix \\( \mathbf{X} \in \mathbb{R}^{n\times p} \\) and response \\( \mathbf{y} \in \mathbb{R}^n \\), LOCO is a LOw-COmmunication distributed algorithm for \\( \ell_2 \\) - penalised convex estimation problems of the form
@@ -341,9 +343,10 @@ Note that the benefit of some of these setting highly depends on the particular 
 
 
 # References
-The LOCO algorithm is described in the following paper:
+The LOCO algorithm is described in the following papers:
 
- * _Heinze, C., McWilliams, B., Meinshausen, N., Krummenacher, G., Vanchinathan, H. P. (2014) [LOCO: Distributing Ridge Regression with Random Projections](http://arxiv.org/abs/1406.3469)_
+ * _Heinze, C., McWilliams, B., Meinshausen, N., Krummenacher, G., Vanchinathan, H. P. (2015) [LOCO: Distributing Ridge Regression with Random Projections](http://arxiv.org/abs/1406.3469)_
+ *  _Heinze, C., McWilliams, B., Meinshausen, N. (2015) [DUAL-LOCO: Distributing Statistical Estimation Using Random Projections](http://arxiv.org/abs/1506.02554)_
 
  Further references:
  
