@@ -2,7 +2,7 @@ package LOCO.utils
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import breeze.linalg.{DenseMatrix, Vector}
+import breeze.linalg.{CSCMatrix, DenseMatrix, Vector}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
@@ -146,6 +146,30 @@ object preprocessing {
     }
 
     val localMat = new DenseMatrix(nObs, columnIndices.length, ArrayOfFeatureVecs.toArray.flatten)
+
+    Iterator((partitionIndex, (columnIndices.toList, localMat)))
+  }
+
+  def createLocalMatricesSparse(
+                           partitionIndex : Int,
+                           iter : Iterator[FeatureVector],
+                           nObs : Int) : Iterator[(Int, (List[Int], CSCMatrix[Double]))] = {
+
+    var columnIndices = new mutable.MutableList[Int]()
+    val featureVectors = iter.toArray
+    val builder = new CSCMatrix.Builder[Double](rows=nObs, cols=featureVectors.length)
+
+    for(colInd <- 0 until featureVectors.length) {
+      val x = featureVectors(colInd)
+      columnIndices += x.index
+      val featureVec = x.observations
+
+      for(rowInd <- 0 until featureVec.length){
+        builder.add(rowInd, colInd, featureVec(rowInd))
+      }
+    }
+
+    val localMat = builder.result()
 
     Iterator((partitionIndex, (columnIndices.toList, localMat)))
   }

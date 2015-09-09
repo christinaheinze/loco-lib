@@ -37,8 +37,8 @@ object localDual {
    * @return
    */
   def runLocalDualAdd(
-      rawAndRandomFeatsWithIndex: (Int, (List[Int], DenseMatrix[Double], DenseMatrix[Double])),
-      RPsAdded : DenseMatrix[Double],
+      rawAndRandomFeatsWithIndex: (Int, (List[Int], Matrix[Double], Matrix[Double])),
+      RPsAdded : Matrix[Double],
       response : Vector[Double],
       doCV : Boolean,
       kFold : Int,
@@ -66,8 +66,8 @@ object localDual {
 
 
   def runLocalDualConcatenate(
-      rawFeatsWithIndex: (Int, (List[Int], DenseMatrix[Double])),
-      RPsMap : collection.Map[Int, DenseMatrix[Double]],
+      rawFeatsWithIndex: (Int, (List[Int], Matrix[Double])),
+      RPsMap : collection.Map[Int, Matrix[Double]],
       response : Vector[Double],
       doCV : Boolean,
       k : Int,
@@ -96,8 +96,8 @@ object localDual {
 
 
   def runLocalDual(
-      matrixWithIndex: (List[Int], DenseMatrix[Double]),
-      randomMats : DenseMatrix[Double],
+      matrixWithIndex: (List[Int], Matrix[Double]),
+      randomMats : Matrix[Double],
       response : Vector[Double],
       doCV : Boolean,
       k : Int,
@@ -110,8 +110,11 @@ object localDual {
       checkDualityGap : Boolean,
       stoppingDualityGap : Double) : (List[Int], Vector[Double]) = {
 
+    // cast to dense matrix again
+    val rawFeatures = matrixWithIndex._2.toDenseMatrix
+
     // create design matrix by concatenating raw and random features
-    val designMat = DenseMatrix.horzcat(matrixWithIndex._2, randomMats)
+    val designMat = DenseMatrix.horzcat(rawFeatures, randomMats.toDenseMatrix)
 
     // total number of features in local design matrix
     val numFeatures = designMat.cols
@@ -155,7 +158,7 @@ object localDual {
 
     // map dual to primal variables and scale correctly
     val primalVariables : DenseMatrix[Double] =
-      matrixWithIndex._2.t * new DenseMatrix(nObs, 1, alpha.toArray)
+      rawFeatures.t * new DenseMatrix(nObs, 1, alpha.toArray)
     val scaling = 1.0/(nObs*min_lambda)
     val beta_hat = primalVariables.toDenseVector * scaling
 
@@ -285,8 +288,8 @@ object localDual {
 
 
   def runLocalDualAdd_lambdaSeq(
-      matrixWithIndex: (Int, (List[Int], DenseMatrix[Double], DenseMatrix[Double])),
-      RPsAdded : DenseMatrix[Double],
+      matrixWithIndex: (Int, (List[Int], Matrix[Double], Matrix[Double])),
+      RPsAdded : Matrix[Double],
       response : Vector[Double],
       lambdaSeq : Seq[Double],
       nObs : Int,
@@ -312,8 +315,8 @@ object localDual {
 
 
   def runLocalDualConcatenate_lambdaSeq(
-      matrixWithIndex: (Int, (List[Int], DenseMatrix[Double])),
-      RPsMap : collection.Map[Int, DenseMatrix[Double]],
+      matrixWithIndex: (Int, (List[Int], Matrix[Double])),
+      RPsMap : collection.Map[Int, Matrix[Double]],
       response : Vector[Double],
       lambdaSeq : Seq[Double],
       nObs : Int,
@@ -339,8 +342,8 @@ object localDual {
 
 
   def runLocalDual_lambdaSeq(
-      matrixWithIndex: (List[Int], DenseMatrix[Double]),
-      randomMats: DenseMatrix[Double],
+      matrixWithIndex: (List[Int], Matrix[Double]),
+      randomMats: Matrix[Double],
       response : Vector[Double],
       lambdaSeq : Seq[Double],
       nObs : Int,
@@ -351,8 +354,11 @@ object localDual {
       checkDualityGap : Boolean,
       stoppingDualityGap : Double) : Seq[(Double, (List[Int], Vector[Double]))] = {
 
+    // cast to dense matrix
+    val rawFeatures = matrixWithIndex._2.toDenseMatrix
+
     // create design matrix by concatenating raw and random features
-    val designMat = DenseMatrix.horzcat(matrixWithIndex._2, randomMats)
+    val designMat = DenseMatrix.horzcat(rawFeatures, randomMats)
 
     val numFeatures = designMat.cols
 
@@ -380,7 +386,7 @@ object localDual {
       }
 
       val primalVarsNotScaled : DenseMatrix[Double] =
-        matrixWithIndex._2.t * new DenseMatrix(nObs, 1, alpha.toArray)
+        rawFeatures.t * new DenseMatrix(nObs, 1, alpha.toArray)
       val scaling = 1.0/(nObs*currentLambda)
       val beta_hat = primalVarsNotScaled.toDenseVector * scaling
 

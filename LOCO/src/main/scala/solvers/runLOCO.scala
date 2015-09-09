@@ -1,6 +1,6 @@
 package LOCO.solvers
 
-import breeze.linalg.Vector
+import breeze.linalg.{DenseMatrix, CSCMatrix, Vector, Matrix}
 import scala.collection._
 
 import org.apache.spark.storage.StorageLevel
@@ -11,7 +11,6 @@ import org.apache.spark.rdd.RDD
 import preprocessingUtils.DataPoint
 import LOCO.utils.preprocessing
 import LOCO.utils.ProjectionUtils._
-
 
 object runLOCO {
 
@@ -70,6 +69,7 @@ object runLOCO {
       nExecutors : Int,
       projection : String,
       flagFFTW : Int,
+      useSparseStructure : Boolean,
       concatenate : Boolean,
       nFeatsProj : Int,
       lambda : Double,
@@ -102,9 +102,9 @@ object runLOCO {
     val t1 = System.currentTimeMillis
 
     // project local matrices
-    val rawAndRandomFeats =
-      project(parsedDataByCol, projection, flagFFTW, concatenate, nFeatsProj, nObs, nFeats,
-        myseed, nPartitions)
+    val rawAndRandomFeats  =
+      project(parsedDataByCol, projection, flagFFTW, useSparseStructure,
+        concatenate, nFeatsProj, nObs, nFeats, myseed, nPartitions)
 
     // force evaluation of rawAndRandomFeats RDD and unpersist parsedDataByCol
     // (only needed for timing purposes)

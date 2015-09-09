@@ -10,8 +10,8 @@ import LOCO.utils.ProjectionUtils._
 object localRidge {
 
   def runLocalRidgeRegressionAdd(
-      matrixWithIndex: (Int, (List[Int], DenseMatrix[Double], DenseMatrix[Double])),
-      RPsAdded : DenseMatrix[Double],
+      matrixWithIndex: (Int, (List[Int], Matrix[Double], Matrix[Double])),
+      RPsAdded : Matrix[Double],
       response : Vector[Double],
       concatenate : Boolean,
       doCV : Boolean,
@@ -34,8 +34,8 @@ object localRidge {
 
 
   def runLocalRidgeRegressionConcatenate(
-      matrixWithIndex: (Int, (List[Int], DenseMatrix[Double])),
-      RPsMap : collection.Map[Int, DenseMatrix[Double]],
+      matrixWithIndex: (Int, (List[Int], Matrix[Double])),
+      RPsMap : collection.Map[Int, Matrix[Double]],
       response : Vector[Double],
       concatenate : Boolean,
       doCV : Boolean,
@@ -59,8 +59,8 @@ object localRidge {
 
 
   def runLocalRidgeRegression(
-      matrixWithIndex:(List[Int], DenseMatrix[Double]),
-      randomMats : DenseMatrix[Double],
+      matrixWithIndex:(List[Int], Matrix[Double]),
+      randomMats : Matrix[Double],
       response : Vector[Double],
       concatenate : Boolean,
       doCV : Boolean,
@@ -182,8 +182,8 @@ object localRidge {
 
 
   def runLocalRidgeRegressionAdd_lambdaSeq(
-      matrixWithIndex: (Int, (List[Int], DenseMatrix[Double], DenseMatrix[Double])),
-      RPsAdded : DenseMatrix[Double],
+      matrixWithIndex: (Int, (List[Int], Matrix[Double], Matrix[Double])),
+      RPsAdded : Matrix[Double],
       response : Vector[Double],
       concatenate : Boolean,
       lambdaSeq : Seq[Double],
@@ -203,8 +203,8 @@ object localRidge {
 
 
   def runLocalRidgeRegressionConcatenate_lambdaSeq(
-      matrixWithIndex: (Int, (List[Int], DenseMatrix[Double])),
-      RPsMap : collection.Map[Int, DenseMatrix[Double]],
+      matrixWithIndex: (Int, (List[Int], Matrix[Double])),
+      RPsMap : collection.Map[Int, Matrix[Double]],
       response : Vector[Double],
       concatenate : Boolean,
       lambdaSeq : Seq[Double],
@@ -225,8 +225,8 @@ object localRidge {
 
 
   def runLocalRidgeRegression_lambdaSeq(
-      matrixWithIndex: (List[Int], DenseMatrix[Double]),
-      randomMats :  DenseMatrix[Double],
+      matrixWithIndex: (List[Int], Matrix[Double]),
+      randomMats :  Matrix[Double],
       response : Vector[Double],
       concatenate : Boolean,
       lambdaSeq : Seq[Double],
@@ -237,8 +237,11 @@ object localRidge {
     // get number of raw features
     val size_raw = matrixWithIndex._1.length
 
+    // cast to dense matrix
+    val rawFeatures = matrixWithIndex._2.toDenseMatrix
+
     // create design matrix by concatenating raw and random features
-    val designMat = DenseMatrix.horzcat(matrixWithIndex._2, randomMats)
+    val designMat = DenseMatrix.horzcat(rawFeatures, randomMats)
 
 
     // create training set

@@ -42,7 +42,7 @@ object driver {
     // specify whether output shall be saved on HDFS
     val saveToHDFS = options.getOrElse("saveToHDFS", "false").toBoolean
     // how many partitions of the data matrix to use
-    val nPartitions = options.getOrElse("nPartitions","4").toInt
+    val nPartitions = options.getOrElse("nPartitions","8").toInt
     // how many executors are used
     val nExecutors = options.getOrElse("nExecutors","4").toInt
 
@@ -56,10 +56,10 @@ object driver {
     val separateTrainTestFiles = options.getOrElse("separateTrainTestFiles", "true").toBoolean
     // training input path
     val trainingDatafile =
-      options.getOrElse("trainingDatafile", "../data/climate_train.txt")
+      options.getOrElse("trainingDatafile", "../data/climate_pres_scaled_p2p3_12_train.txt")
     // test input path
     val testDatafile =
-      options.getOrElse("testDatafile", "../data/climate_test.txt")
+      options.getOrElse("testDatafile", "../data/climate_pres_scaled_p2p3_12_test.txt")
     // if only one file is provided, proportion used to test set
     val proportionTest = options.getOrElse("proportionTest", "0.2").toDouble
     // random seed
@@ -72,7 +72,7 @@ object driver {
     // use factorie or SDCA
     val optimizer = options.getOrElse("optimizer", "SDCA")
     // number of iterations used in SDCA
-    val numIterations = options.getOrElse("numIterations", "5000").toInt
+    val numIterations = options.getOrElse("numIterations", "20000").toInt
     // set duality gap as convergence criterion
     val stoppingDualityGap = options.getOrElse("stoppingDualityGap", "0.01").toDouble
     // specify whether duality gap as convergence criterion shall be used
@@ -86,12 +86,14 @@ object driver {
     val centerFeaturesOnly = options.getOrElse("centerFeaturesOnly", "false").toBoolean
     // specify projection (sparse or SDCT)
     val projection = options.getOrElse("projection", "sparse")
+    // shall sparse data structures be used?
+    val useSparseStructure = options.getOrElse("useSparseStructure", "false").toBoolean
     // specify flag for SDCT/FFTW: 64 corresponds to FFTW_ESTIMATE, 0 corresponds to FFTW_MEASURE
     val flagFFTW = options.getOrElse("flagFFTW", "64").toInt
     // specify projection dimension
-    val nFeatsProj = options.getOrElse("nFeatsProj", "260").toInt
+    val nFeatsProj = options.getOrElse("nFeatsProj", "200").toInt
     // concatenate or add
-    val concatenate = options.getOrElse("concatenate", "true").toBoolean
+    val concatenate = options.getOrElse("concatenate", "false").toBoolean
     // cross validation: "global", "local", or "none"
     val CVKind = options.getOrElse("CVKind", "none")
     // k for k-fold CV
@@ -99,7 +101,7 @@ object driver {
     // regularization parameter sequence start used in CV
     val lambdaSeqFrom = options.getOrElse("lambdaSeqFrom", "65").toDouble
     // regularization parameter sequence end used in CV
-    val lambdaSeqTo = options.getOrElse("lambdaSeqTo", "80").toDouble
+    val lambdaSeqTo = options.getOrElse("lambdaSeqTo", "66").toDouble
     // regularization parameter sequence step size used in CV
     val lambdaSeqBy = options.getOrElse("lambdaSeqBy", "1").toDouble
     // create lambda sequence
@@ -139,6 +141,7 @@ object driver {
     println("center:                     " + center)
     println("centerFeaturesOnly:         " + centerFeaturesOnly)
     println("projection:                 " + projection)
+    println("useSparseStructure:          " + useSparseStructure)
     println("flagFFTW:                   " + flagFFTW)
     println("nFeatsProj:                 " + nFeatsProj)
     println("concatenate:                " + concatenate)
@@ -207,7 +210,8 @@ object driver {
       if(CVKind == "global"){
         CVUtils.globalCV(
           sc, classification, myseed, training,  center, centerFeaturesOnly, nPartitions,
-          nExecutors, projection, flagFFTW, concatenate, nFeatsProj, lambdaSeq, kfold, optimizer,
+          nExecutors, projection, flagFFTW, useSparseStructure,
+          concatenate, nFeatsProj, lambdaSeq, kfold, optimizer,
           numIterations, checkDualityGap, stoppingDualityGap)
       }else{
         lambda
@@ -217,7 +221,8 @@ object driver {
     val (betaLoco, startTime, colMeans, meanResponse) =
       runLOCO.run(
         sc, classification, myseed, training, center, centerFeaturesOnly, nPartitions, nExecutors,
-        projection, flagFFTW, concatenate, nFeatsProj, lambdaGlobal, CVKind, lambdaSeq, kfold,
+        projection, flagFFTW, useSparseStructure,
+        concatenate, nFeatsProj, lambdaGlobal, CVKind, lambdaSeq, kfold,
         optimizer, numIterations, checkDualityGap, stoppingDualityGap)
 
     // get second timestamp needed to time LOCO and compute time difference
@@ -229,7 +234,8 @@ object driver {
       sc, classification, optimizer, numIterations, startTime, runTime,
       betaLoco, training, test, center, centerFeaturesOnly, meanResponse, colMeans, dataFormat,
       separateTrainTestFiles, trainingDatafile, testDatafile, dataFile, proportionTest, nPartitions,
-      nExecutors, nFeatsProj, projection, flagFFTW, concatenate, lambda, CVKind, lambdaSeq, kfold,
+      nExecutors, nFeatsProj, projection, flagFFTW, useSparseStructure,
+      concatenate, lambda, CVKind, lambdaSeq, kfold,
       myseed, lambdaGlobal, checkDualityGap, stoppingDualityGap, saveToHDFS, directoryNameResultsFolder)
 
     // compute end time of application and compute time needed overall

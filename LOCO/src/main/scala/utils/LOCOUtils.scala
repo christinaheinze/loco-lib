@@ -53,6 +53,7 @@ object LOCOUtils {
      nFeatsProj : Int,
      projection : String,
      flagFFTW : Int,
+     useSparseStructure : Boolean,
      concatenate : Boolean,
      lambda : Double,
      CVKind : String,
@@ -167,6 +168,7 @@ object LOCOUtils {
 
     build.append("\nProjection:              " + projection)
     build.append("\nflagFFTW:                " + flagFFTW)
+    build.append("\nuseSparseStructure:      " + useSparseStructure)
     build.append("\nnFeatsProj:              " + nFeatsProj)
     build.append("\nconcatenate:             " + concatenate)
     build.append("\nCVKind:                  " + CVKind)

@@ -1,7 +1,7 @@
 package LOCO.utils
 
 import scala.collection.mutable.ArrayBuffer
-import breeze.linalg.{CSCMatrix, DenseMatrix, DenseVector}
+import breeze.linalg.{Matrix, CSCMatrix, DenseMatrix, DenseVector}
 
 import org.apache.spark.rdd.RDD
 
@@ -34,14 +34,15 @@ object ProjectionUtils {
       parsedDataByCol : RDD[FeatureVector],
       projection : String,
       flagFFTW : Int,
+      useSparseStructure : Boolean,
       concatenate : Boolean,
       nFeatsProj : Int,
       nObs : Int,
       nFeats : Int,
       seed : Int,
-      nPartitions : Int) : RDD[(Int, (List[Int], DenseMatrix[Double], DenseMatrix[Double]))] = {
+      nPartitions : Int) : RDD[(Int, (List[Int], Matrix[Double], Matrix[Double]))] = {
 
-    // check whether projection dimension has been chosen smaller 
+    // check whether projection dimension has been chosen smaller
     // than number of raw features per worker
     if(concatenate || projection == "SDCT"){
       assert(isValidProjectionDim(nFeatsProj, nPartitions, nFeats),
@@ -49,11 +50,35 @@ object ProjectionUtils {
           "per partition (= number of features / number of partitions)")
     }
 
+    val res = if(useSparseStructure){
+      projectSparse(
+        parsedDataByCol, projection, flagFFTW, concatenate, nFeatsProj, nObs, nFeats,
+        seed, nPartitions)
+    }else{
+      projectDense(
+        parsedDataByCol, projection, flagFFTW, concatenate, nFeatsProj, nObs, nFeats,
+        seed, nPartitions)
+    }
+
+    res.asInstanceOf[RDD[(Int, (List[Int], Matrix[Double], Matrix[Double]))]]
+  }
+
+  def projectDense(
+               parsedDataByCol : RDD[FeatureVector],
+               projection : String,
+               flagFFTW : Int,
+               concatenate : Boolean,
+               nFeatsProj : Int,
+               nObs : Int,
+               nFeats : Int,
+               seed : Int,
+               nPartitions : Int) : RDD[(Int, (List[Int], DenseMatrix[Double], DenseMatrix[Double]))] = {
+
     // get partition index and create local raw feature matrices
     val localMats : RDD[(Int, (List[Int], DenseMatrix[Double]))] =
-      parsedDataByCol.mapPartitionsWithIndex((partitionID, iterator) => 
-          preprocessing.createLocalMatrices(partitionID, iterator, nObs),
-          preservesPartitioning = true
+      parsedDataByCol.mapPartitionsWithIndex((partitionID, iterator) =>
+        preprocessing.createLocalMatrices(partitionID, iterator, nObs),
+        preservesPartitioning = true
       )
 
     // compute random projections and return resulting RDD
@@ -67,6 +92,37 @@ object ProjectionUtils {
     }
   }
 
+  def projectSparse(
+                    parsedDataByCol : RDD[FeatureVector],
+                    projection : String,
+                    flagFFTW : Int,
+                    concatenate : Boolean,
+                    nFeatsProj : Int,
+                    nObs : Int,
+                    nFeats : Int,
+                    seed : Int,
+                    nPartitions : Int) : RDD[(Int, (List[Int], CSCMatrix[Double], CSCMatrix[Double]))] = {
+
+
+    // get partition index and create local raw feature matrices
+    val localMats : RDD[(Int, (List[Int], CSCMatrix[Double]))] =
+      parsedDataByCol.mapPartitionsWithIndex((partitionID, iterator) =>
+        preprocessing.createLocalMatricesSparse(partitionID, iterator, nObs),
+        preservesPartitioning = true
+      )
+
+    // compute random projections and return resulting RDD
+    localMats.mapValues{case(colIndices, rawFeats) =>
+      val RP = projection match{
+//        case "SDCT" => SDCT(rawFeats, nFeatsProj, seed, flagFFTW)
+        case "sparse" =>   rawFeats * sparseProjMatCSC(rawFeats.cols, nFeatsProj, seed)
+        case _ => throw new IllegalArgumentException("Invalid argument for projection : " + projection)
+      }
+      (colIndices, rawFeats, RP)
+    }
+
+  }
+
   /**
    * Sums or concatenates random projections from remaining partitions locally.
    * 
@@ -78,9 +134,9 @@ object ProjectionUtils {
    * @return Returns DenseMatrix with random features as they'll enter in the local design matrix.
    */
   def randomFeaturesConcatenateOrAddAtWorker(
-      matrixWithIndex: (Int, (List[Int], DenseMatrix[Double])),
-      randomProjectionMap : collection.Map[Int, DenseMatrix[Double]],
-      concatenate : Boolean) : DenseMatrix[Double] = {
+      matrixWithIndex: (Int, (List[Int], Matrix[Double])),
+      randomProjectionMap : collection.Map[Int, Matrix[Double]],
+      concatenate : Boolean) : Matrix[Double] = {
     
     // extract key of worker
     val key = matrixWithIndex._1
@@ -103,8 +159,8 @@ object ProjectionUtils {
    * @return Returns DenseMatrix with random features as they'll enter in the local design matrix.
    */
   def randomFeaturesSubtractLocal(
-      matrixWithIndex: (Int, (List[Int], DenseMatrix[Double], DenseMatrix[Double])),
-      randomProjectionsAdded : DenseMatrix[Double]) : DenseMatrix[Double] = {
+      matrixWithIndex: (Int, (List[Int], Matrix[Double], Matrix[Double])),
+      randomProjectionsAdded : Matrix[Double]) : Matrix[Double] = {
     randomProjectionsAdded - matrixWithIndex._2._3
   }
 
@@ -117,8 +173,8 @@ object ProjectionUtils {
    * @return Returns DenseMatrix with random features as they'll enter in the local design matrix.
    */
   def aggregationOfRPs(
-      randomProjectionMap : Iterable[DenseMatrix[Double]], 
-      concatenate : Boolean) : DenseMatrix[Double] = {
+      randomProjectionMap : Iterable[Matrix[Double]],
+      concatenate : Boolean) : Matrix[Double] = {
     if(concatenate){
       // concatenate random projection matrices from remaining workers
       randomProjectionMap.reduce((x, y) => DenseMatrix.horzcat(x, y))
@@ -197,7 +253,10 @@ object ProjectionUtils {
 
     (0 until nFeatures).map { i =>
       (0 until nProjDim).map { j =>
-        builder.add(i, j, math.sqrt(3.0/nProjDim) * sample(dist))
+        val entry = sample(dist)
+        if(!(entry == 0)){
+          builder.add(i, j, math.sqrt(3.0/nProjDim) * entry)
+        }
       }
     }
 

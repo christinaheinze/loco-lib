@@ -65,6 +65,7 @@ object CVUtils {
       nExecutors : Int,
       projection : String,
       flagFFTW : Int,
+      useSparseStructure : Boolean,
       concatenate : Boolean,
       nFeatsProj : Int,
       lambdaSeq : Seq[Double],
@@ -93,7 +94,8 @@ object CVUtils {
           val (lambdasAndCoefficientVectorsMap, colMeans, meanResponse) =
             runForLambdaSequence(
               sc, classification, seed, training, center, centerFeaturesOnly, nPartitions,
-              nExecutors, projection, flagFFTW, concatenate, nFeatsProj, lambdaSeq, optimizer,
+              nExecutors, projection, flagFFTW, useSparseStructure,
+              concatenate, nFeatsProj, lambdaSeq, optimizer,
               numIterations, checkDualityGap, stoppingDualityGap)
 
           // broadcast column means if features should be centered
@@ -196,6 +198,7 @@ object CVUtils {
       nExecutors : Int,
       projection : String,
       flagFFTW : Int,
+      useSparseStructure : Boolean,
       concatenate : Boolean,
       nFeatsProj : Int,
       lambdaSeq : Seq[Double],
@@ -223,7 +226,9 @@ object CVUtils {
 
     // project local matrices
     val rawAndRandomFeats =
-      project(parsedDataByCol, projection, flagFFTW, concatenate, nFeatsProj, nObs, nFeats,
+      project(
+        parsedDataByCol, projection, flagFFTW, useSparseStructure,
+        concatenate, nFeatsProj, nObs, nFeats,
         myseed, nPartitions)
 
     rawAndRandomFeats.persist(StorageLevel.MEMORY_AND_DISK)
