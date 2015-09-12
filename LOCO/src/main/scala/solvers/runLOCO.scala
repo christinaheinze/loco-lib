@@ -5,7 +5,6 @@ import scala.collection._
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 
 import preprocessingUtils.DataPoint
@@ -79,7 +78,7 @@ object runLOCO {
       optimizer : String,
       numIterations : Int,
       checkDualityGap : Boolean,
-      stoppingDualityGap : Double) : (Vector[Double], Long, Vector[Double], Double) = {
+      stoppingDualityGap : Double) : (Vector[Double], Long, Long, Vector[Double], Double) = {
 
     // distribute training data over columns, center data (so that we do not need an intercept)
     // and also return means of response and feature vectors (to driver)
@@ -98,18 +97,25 @@ object runLOCO {
     println("\nPartitions training over rows: " + trainingData.partitions.size)
     println("\nPartitions training over cols: " + parsedDataByCol.partitions.size)
 
+
+    val localMats = preprocessing.createLocalMatrices(parsedDataByCol, useSparseStructure, nObs)
+    localMats.persist(StorageLevel.MEMORY_AND_DISK).foreach(x => {})
+    parsedDataByCol.unpersist()
+
     // start timing
     val t1 = System.currentTimeMillis
 
     // project local matrices
     val rawAndRandomFeats  =
-      project(parsedDataByCol, projection, flagFFTW, useSparseStructure,
+      project(localMats, projection, flagFFTW, useSparseStructure,
         concatenate, nFeatsProj, nObs, nFeats, myseed, nPartitions)
 
-    // force evaluation of rawAndRandomFeats RDD and unpersist parsedDataByCol
+    // force evaluation of rawAndRandomFeats RDD and unpersist localMats
     // (only needed for timing purposes)
     rawAndRandomFeats.persist(StorageLevel.MEMORY_AND_DISK).foreach(x => {})
-    parsedDataByCol.unpersist()
+    localMats.unpersist()
+
+    val tRPComputed = System.currentTimeMillis
 
     // if random projection are to be concatenated, broadcast random projections
     val randomProjectionsConcatenated =
@@ -185,6 +191,6 @@ object runLOCO {
 
     // sort coefficients by column index and return LOCO coefficients, starting time stamp,
     // column means and the mean of the response
-    (Vector(betaLocoAsMap.toSeq.sorted.map(_._2).toArray), t1, colMeans, meanResponse)
+    (Vector(betaLocoAsMap.toSeq.sorted.map(_._2).toArray), t1, tRPComputed, colMeans, meanResponse)
   }
 }

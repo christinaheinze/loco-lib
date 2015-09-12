@@ -2,11 +2,10 @@ package LOCO.utils
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import breeze.linalg.{CSCMatrix, DenseMatrix, Vector}
+import breeze.linalg.{CSCMatrix, DenseMatrix, Vector, Matrix}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
 
 import preprocessingUtils.{DataPoint, FeatureVector}
 
@@ -131,7 +130,7 @@ object preprocessing {
    *         consists of a tuple containing the column indices and the local raw features of
    *         the partition.
    */
-  def createLocalMatrices(
+  def createLocalMatricesDense(
       partitionIndex : Int,
       iter : Iterator[FeatureVector],
       nObs : Int) : Iterator[(Int, (List[Int], DenseMatrix[Double]))] = {
@@ -165,7 +164,8 @@ object preprocessing {
       val featureVec = x.observations
 
       for(rowInd <- 0 until featureVec.length){
-        builder.add(rowInd, colInd, featureVec(rowInd))
+        if(featureVec(rowInd) != 0)
+          builder.add(rowInd, colInd, featureVec(rowInd))
       }
     }
 
@@ -174,5 +174,27 @@ object preprocessing {
     Iterator((partitionIndex, (columnIndices.toList, localMat)))
   }
 
+  def createLocalMatrices(
+                           parsedDataByCol : RDD[FeatureVector],
+                           useSparseStructure : Boolean,
+                           nObs : Int) : RDD[(Int, (List[Int], Matrix[Double]))] = {
+
+    val localMats =
+      if (useSparseStructure) {
+        parsedDataByCol.mapPartitionsWithIndex((partitionID, iterator) =>
+          createLocalMatricesSparse(partitionID, iterator, nObs),
+          preservesPartitioning = true
+        )
+      } else {
+        parsedDataByCol.mapPartitionsWithIndex((partitionID, iterator) =>
+          createLocalMatricesDense(partitionID, iterator, nObs),
+          preservesPartitioning = true
+        )
+      }
+
+    localMats.asInstanceOf[RDD[(Int, (List[Int], Matrix[Double]))]]
+  }
+
 
 }
+

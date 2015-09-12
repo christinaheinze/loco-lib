@@ -224,10 +224,12 @@ object CVUtils {
     println("\nProjection dimension: " + nFeatsProj)
     println("\nPartitions training over cols: " + parsedDataByCol.partitions.size)
 
+    val localMats = preprocessing.createLocalMatrices(parsedDataByCol, useSparseStructure, nObs)
+
     // project local matrices
     val rawAndRandomFeats =
       project(
-        parsedDataByCol, projection, flagFFTW, useSparseStructure,
+        localMats, projection, flagFFTW, useSparseStructure,
         concatenate, nFeatsProj, nObs, nFeats,
         myseed, nPartitions)
 

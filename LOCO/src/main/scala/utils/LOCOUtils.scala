@@ -35,6 +35,8 @@ object LOCOUtils {
      numIterations : Int,
      timeStampStart : Long,
      timeDifference : Long,
+     RPTime : Long,
+     restTime : Long,
      betaLoco : Vector[Double],
      trainingDataNotCentered : RDD[DataPoint],
      testDataNotCentered : RDD[DataPoint],
@@ -175,6 +177,8 @@ object LOCOUtils {
     build.append(if(CVKind == "global")
                  "\nlambdaGlobal:            " + lambdaGlobal)
     build.append("\nRun time LOCO:           " + timeDifference)
+    build.append("\nRP time LOCO:            " + RPTime)
+    build.append("\nRest time LOCO:          " + restTime)
     build.append(if(CVKind == "none")
                  "\nlambda (provided):       " + lambda
                  else{

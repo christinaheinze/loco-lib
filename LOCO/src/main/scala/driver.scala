@@ -42,7 +42,7 @@ object driver {
     // specify whether output shall be saved on HDFS
     val saveToHDFS = options.getOrElse("saveToHDFS", "false").toBoolean
     // how many partitions of the data matrix to use
-    val nPartitions = options.getOrElse("nPartitions","8").toInt
+    val nPartitions = options.getOrElse("nPartitions","4").toInt
     // how many executors are used
     val nExecutors = options.getOrElse("nExecutors","4").toInt
 
@@ -91,7 +91,7 @@ object driver {
     // specify flag for SDCT/FFTW: 64 corresponds to FFTW_ESTIMATE, 0 corresponds to FFTW_MEASURE
     val flagFFTW = options.getOrElse("flagFFTW", "64").toInt
     // specify projection dimension
-    val nFeatsProj = options.getOrElse("nFeatsProj", "200").toInt
+    val nFeatsProj = options.getOrElse("nFeatsProj", "400").toInt
     // concatenate or add
     val concatenate = options.getOrElse("concatenate", "false").toBoolean
     // cross validation: "global", "local", or "none"
@@ -141,7 +141,7 @@ object driver {
     println("center:                     " + center)
     println("centerFeaturesOnly:         " + centerFeaturesOnly)
     println("projection:                 " + projection)
-    println("useSparseStructure:          " + useSparseStructure)
+    println("useSparseStructure:         " + useSparseStructure)
     println("flagFFTW:                   " + flagFFTW)
     println("nFeatsProj:                 " + nFeatsProj)
     println("concatenate:                " + concatenate)
@@ -218,7 +218,7 @@ object driver {
       }
 
     // compute LOCO coefficients
-    val (betaLoco, startTime, colMeans, meanResponse) =
+    val (betaLoco, startTime, afterRPTime, colMeans, meanResponse) =
       runLOCO.run(
         sc, classification, myseed, training, center, centerFeaturesOnly, nPartitions, nExecutors,
         projection, flagFFTW, useSparseStructure,
@@ -228,10 +228,12 @@ object driver {
     // get second timestamp needed to time LOCO and compute time difference
     val endTime = System.currentTimeMillis
     val runTime = endTime - startTime
+    val RPTime = afterRPTime - startTime
+    val restTime = runTime - RPTime
 
     // print summary stats
     printSummaryStatistics(
-      sc, classification, optimizer, numIterations, startTime, runTime,
+      sc, classification, optimizer, numIterations, startTime, runTime, RPTime, restTime,
       betaLoco, training, test, center, centerFeaturesOnly, meanResponse, colMeans, dataFormat,
       separateTrainTestFiles, trainingDatafile, testDatafile, dataFile, proportionTest, nPartitions,
       nExecutors, nFeatsProj, projection, flagFFTW, useSparseStructure,

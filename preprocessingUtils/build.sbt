@@ -6,8 +6,8 @@ scalaVersion := "2.10.4"
 
 // additional libraries
 libraryDependencies ++= Seq(
-  "org.apache.spark" %% "spark-core" % "1.4.1" % "provided",
-  "org.apache.spark"  %% "spark-mllib" % "1.4.1",
+  "org.apache.spark" %% "spark-core" % "1.5.0" % "provided",
+  "org.apache.spark"  %% "spark-mllib" % "1.5.0",
   "org.scalanlp" %% "breeze" % "0.11.2",
   "org.scalanlp" %% "breeze-natives" % "0.11.2",
   "com.github.fommil.netlib" % "all" % "1.1.2")

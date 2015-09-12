@@ -2,10 +2,10 @@ package LOCO.utils
 
 import scala.collection.mutable.ArrayBuffer
 import breeze.linalg.{Matrix, CSCMatrix, DenseMatrix, DenseVector}
+import edu.emory.mathcs.jtransforms.dct._
 
 import org.apache.spark.rdd.RDD
 
-import preprocessingUtils.FeatureVector
 import LOCO.utils.LOCOUtils._
 
 
@@ -31,16 +31,16 @@ object ProjectionUtils {
    *         features as value.                
    */
   def project(
-      parsedDataByCol : RDD[FeatureVector],
-      projection : String,
-      flagFFTW : Int,
-      useSparseStructure : Boolean,
-      concatenate : Boolean,
-      nFeatsProj : Int,
-      nObs : Int,
-      nFeats : Int,
-      seed : Int,
-      nPartitions : Int) : RDD[(Int, (List[Int], Matrix[Double], Matrix[Double]))] = {
+               localMats : RDD[(Int, (List[Int], Matrix[Double]))],
+               projection : String,
+               flagFFTW : Int,
+               useSparseStructure : Boolean,
+               concatenate : Boolean,
+               nFeatsProj : Int,
+               nObs : Int,
+               nFeats : Int,
+               seed : Int,
+               nPartitions : Int) : RDD[(Int, (List[Int], Matrix[Double], DenseMatrix[Double]))] = {
 
     // check whether projection dimension has been chosen smaller
     // than number of raw features per worker
@@ -52,39 +52,28 @@ object ProjectionUtils {
 
     val res = if(useSparseStructure){
       projectSparse(
-        parsedDataByCol, projection, flagFFTW, concatenate, nFeatsProj, nObs, nFeats,
-        seed, nPartitions)
+        localMats.asInstanceOf[RDD[(Int, (List[Int], CSCMatrix[Double]))]],
+        projection, flagFFTW, nFeatsProj, seed)
     }else{
       projectDense(
-        parsedDataByCol, projection, flagFFTW, concatenate, nFeatsProj, nObs, nFeats,
-        seed, nPartitions)
+        localMats.asInstanceOf[RDD[(Int, (List[Int], DenseMatrix[Double]))]],
+        projection, flagFFTW, nFeatsProj, seed)
     }
 
-    res.asInstanceOf[RDD[(Int, (List[Int], Matrix[Double], Matrix[Double]))]]
+    res.asInstanceOf[RDD[(Int, (List[Int], Matrix[Double], DenseMatrix[Double]))]]
   }
 
   def projectDense(
-               parsedDataByCol : RDD[FeatureVector],
-               projection : String,
-               flagFFTW : Int,
-               concatenate : Boolean,
-               nFeatsProj : Int,
-               nObs : Int,
-               nFeats : Int,
-               seed : Int,
-               nPartitions : Int) : RDD[(Int, (List[Int], DenseMatrix[Double], DenseMatrix[Double]))] = {
-
-    // get partition index and create local raw feature matrices
-    val localMats : RDD[(Int, (List[Int], DenseMatrix[Double]))] =
-      parsedDataByCol.mapPartitionsWithIndex((partitionID, iterator) =>
-        preprocessing.createLocalMatrices(partitionID, iterator, nObs),
-        preservesPartitioning = true
-      )
+                    localMats : RDD[(Int, (List[Int], DenseMatrix[Double]))],
+                    projection : String,
+                    flagFFTW : Int,
+                    nFeatsProj : Int,
+                    seed : Int) : RDD[(Int, (List[Int], DenseMatrix[Double], DenseMatrix[Double]))] = {
 
     // compute random projections and return resulting RDD
     localMats.mapValues{case(colIndices, rawFeats) =>
       val RP = projection match{
-        case "SDCT" => SDCT(rawFeats, nFeatsProj, seed, flagFFTW)
+        case "SDCT" => SubsampledDCT(rawFeats, nFeatsProj, seed) //SDCT(rawFeats, nFeatsProj, seed, flagFFTW)
         case "sparse" => rawFeats * sparseProjMat(rawFeats.cols, nFeatsProj, seed)
         case _ => throw new IllegalArgumentException("Invalid argument for projection : " + projection)
       }
@@ -93,29 +82,18 @@ object ProjectionUtils {
   }
 
   def projectSparse(
-                    parsedDataByCol : RDD[FeatureVector],
-                    projection : String,
-                    flagFFTW : Int,
-                    concatenate : Boolean,
-                    nFeatsProj : Int,
-                    nObs : Int,
-                    nFeats : Int,
-                    seed : Int,
-                    nPartitions : Int) : RDD[(Int, (List[Int], CSCMatrix[Double], CSCMatrix[Double]))] = {
+                     localMats : RDD[(Int, (List[Int], CSCMatrix[Double]))],
+                     projection : String,
+                     flagFFTW : Int,
+                     nFeatsProj : Int,
+                     seed : Int) : RDD[(Int, (List[Int], CSCMatrix[Double], DenseMatrix[Double]))] = {
 
-
-    // get partition index and create local raw feature matrices
-    val localMats : RDD[(Int, (List[Int], CSCMatrix[Double]))] =
-      parsedDataByCol.mapPartitionsWithIndex((partitionID, iterator) =>
-        preprocessing.createLocalMatricesSparse(partitionID, iterator, nObs),
-        preservesPartitioning = true
-      )
 
     // compute random projections and return resulting RDD
     localMats.mapValues{case(colIndices, rawFeats) =>
       val RP = projection match{
-//        case "SDCT" => SDCT(rawFeats, nFeatsProj, seed, flagFFTW)
-        case "sparse" =>   rawFeats * sparseProjMatCSC(rawFeats.cols, nFeatsProj, seed)
+        case "SDCT" => SubsampledDCT(rawFeats.toDenseMatrix, nFeatsProj, seed)// SDCT(rawFeats, nFeatsProj, seed, flagFFTW)
+        case "sparse" =>   (rawFeats * sparseProjMatCSC(rawFeats.cols, nFeatsProj, seed)).toDenseMatrix
         case _ => throw new IllegalArgumentException("Invalid argument for projection : " + projection)
       }
       (colIndices, rawFeats, RP)
@@ -251,10 +229,11 @@ object ProjectionUtils {
     // initialize builder
     val builder = new CSCMatrix.Builder[Double](rows = nFeatures, cols = nProjDim)
 
-    (0 until nFeatures).map { i =>
-      (0 until nProjDim).map { j =>
+    for(i <- 0 until nFeatures){
+      for(j <- 0 until nProjDim){
         val entry = sample(dist)
-        if(!(entry == 0)){
+
+        if(entry != 0){
           builder.add(i, j, math.sqrt(3.0/nProjDim) * entry)
         }
       }
@@ -296,11 +275,11 @@ object ProjectionUtils {
    * @return Projected input matrix
    */
   def DCT(
-      dataMat : DenseMatrix[Double],
-      nProjDim : Int,
-      diagonal : DenseVector[Double],
-      cols : Boolean,
-      flagFFTW : Int) : DenseMatrix[Double] = {
+          dataMat : DenseMatrix[Double],
+          diagonal : DenseVector[Double],
+          cols : Boolean,
+          flagFFTW : Int
+          ) : DenseMatrix[Double] = {
 
     // extract the dimension of the vectors that should be transformed
     // and the number of vectors that should be transformed
@@ -369,7 +348,7 @@ object ProjectionUtils {
     val D = DenseVector.tabulate(dim){i => sample(dist)} * srhtConst
 
     // compute the DCT
-    var res = DCT(dataMat, nProjDim, D, cols, flagFFTW)
+    var res = DCT(dataMat, D, cols, flagFFTW)
 
     // subsample
     val subsampledIndices = util.Random.shuffle(List.fill(1)(0 until dim).flatten).take(nProjDim)
@@ -383,5 +362,55 @@ object ProjectionUtils {
       res.t
     }
   }
+
+  def DCTjTrans(vec : Array[Double]) : Array[Double] = {
+      val result : Array[Double] = vec.toArray
+      val jTransformer = new DoubleDCT_1D(result.length)
+      jTransformer.forward(result, true)
+      result
+  }
+
+  def SubsampledDCT(
+                     dataMat : DenseMatrix[Double],
+                     nProjDim : Int,
+                     seed : Int
+                     ) : DenseMatrix[Double]= {
+
+    // set seed
+    scala.util.Random.setSeed(seed)
+
+    // number of observations
+    val n = dataMat.rows
+
+    // number of features
+    val dim = dataMat.cols
+
+    // buffer for transformed vectors
+    var ArrayOfFeatureVecs = new ArrayBuffer[Array[Double]]()
+
+    // compute scaling factor
+    val srhtConst = math.sqrt(dim / nProjDim.toDouble)
+
+    // sample from Rademacher distribution and compute diagonal
+    val dist = Map(-1.0 -> 1.toDouble/2, 1.0 -> 1.toDouble/2)
+    val D : DenseVector[Double] = DenseVector.tabulate(dim){i => sample(dist)} * srhtConst
+
+    // transform
+    for(i <- 0 until n){
+      val vec : Array[Double] = (D :* dataMat(i, ::).t).toArray
+      val tmp = DCTjTrans(vec)
+      ArrayOfFeatureVecs += tmp
+    }
+
+    val res = new DenseMatrix(dim, n, ArrayOfFeatureVecs.toArray.flatten).t
+
+    // subsample
+    val subsampledIndices = util.Random.shuffle(List.fill(1)(0 until dim).flatten).take(nProjDim)
+
+    res(::, subsampledIndices).toDenseMatrix
+  }
+
+
+
 
 }
