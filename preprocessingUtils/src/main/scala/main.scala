@@ -1,6 +1,9 @@
 package preprocessingUtils
 
+import breeze.linalg.max
 import org.apache.log4j.{Level, Logger}
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkContext, SparkConf}
 
 import loadData.load._
@@ -20,7 +23,6 @@ object main {
       }
     }.toMap
 
-
     // parse and read in inputs
 
     // output directory
@@ -29,10 +31,12 @@ object main {
     val nPartitions = options.getOrElse("nPartitions","4").toInt
     // "text" or "object"
     val dataFormat = options.getOrElse("dataFormat", "text")
+    // use sparse data structures
+    val sparse = options.getOrElse("sparse", "false").toBoolean
     // "libsvm", "spaces" or "comma"
     val textDataFormat = options.getOrElse("textDataFormat", "spaces")
     // input path
-    val dataFile = options.getOrElse("dataFile", "../data/dogs_vs_cats_n5000.txt")
+    val dataFile = options.getOrElse("dataFile", "../data/E2006")
     // provide training and test set as separate files?
     val separateTrainTestFiles = options.getOrElse("separateTrainTestFiles", "true").toBoolean
     // training input path
@@ -55,21 +59,23 @@ object main {
     // specify class of output: DataPoint, LabeledPoint or DoubleArray
     val outputClass = options.getOrElse("outputClass", "DataPoint")
     // if two different output formats are desired, set to true
-    val twoOutputClasses = options.getOrElse("twoOutputClasses", "true").toBoolean
+    val twoOutputClasses = options.getOrElse("twoOutputClasses", "false").toBoolean
     // specify second output format
     val secondOutputClass = options.getOrElse("secondOutputClass", "LabeledPoint")
     // center the features to have mean zero
-    val centerFeatures = options.getOrElse("centerFeatures", "true").toBoolean
+    val centerFeatures = options.getOrElse("centerFeatures", "false").toBoolean
     // center the response to have mean zero
-    val centerResponse = options.getOrElse("centerResponse", "true").toBoolean
+    val centerResponse = options.getOrElse("centerResponse", "false").toBoolean
     // scale the features to have unit variance
-    val scaleFeatures = options.getOrElse("scaleFeatures", "true").toBoolean
+    val scaleFeatures = options.getOrElse("scaleFeatures", "false").toBoolean
     // scale the response to have unit variance
     val scaleResponse = options.getOrElse("scaleResponse", "false").toBoolean
 
     // print out inputs
     println("\nSpecify input and output options: ")
     println("dataFormat:              " + dataFormat)
+    println("sparse:                  " + sparse)
+
     if(dataFormat == "text"){
       println("textDataFormat:          " + textDataFormat)
     }
@@ -110,20 +116,22 @@ object main {
 
     // read in training and test data, distribute over rows, and map elements
     // to LabeledPoint so that we can use MLlib's centering and scaling
-    val (trainingDataNotCenteredLabeledPoint, testDataNotCenteredLabeledPoint) =
+    val (trainingDataNotCenteredLabeledPoint, testDataNotCenteredLabeledPoint) : (RDD[LabeledPoint], RDD[LabeledPoint]) =
       dataFormat match {
         case "object" =>
           readAndCastObjectFiles(
-            sc, dataFile, nPartitions, separateTrainTestFiles, trainingDatafile, testDatafile,
+            sc, dataFile, nPartitions, sparse,
+            separateTrainTestFiles, trainingDatafile, testDatafile,
             proportionTest, myseed)
         case "text" =>
-          val (train, test) =
-            readTextFiles(
-              sc, dataFile, nPartitions, textDataFormat, separateTrainTestFiles,
-              trainingDatafile, testDatafile, proportionTest, myseed)
-          (train.map(x => doubleArrayToLabeledPoint(x)),test.map(x => doubleArrayToLabeledPoint(x)))
+          readTextFiles(
+            sc, dataFile, nPartitions, textDataFormat, sparse, separateTrainTestFiles,
+            trainingDatafile, testDatafile, proportionTest, myseed)
         case _ => throw new Error("dataFormat must be \'object\' or \'text\'!")
       }
+
+    assert(!(sparse & (centerFeatures | scaleFeatures)), "Sparse vectors cannot be used in combination" +
+      "with centerFeatures or scaleFeatures.")
 
     // center and/or scale training data
     val trainingDataCentered =
@@ -143,7 +151,7 @@ object main {
 
     // cast in desired format as specified in "outputClass" and save
     save.castAndSave(
-      trainingDataCentered, testDataCentered, outputClass, outputTrainFileName, outputTestFileName)
+      trainingDataCentered, testDataCentered, outputClass, outputTrainFileName + "-rowwise", outputTestFileName + "-rowwise")
 
     // if two different output formats are desired, cast in desired format as specified
     // in "secondOutputClass" and save
@@ -152,6 +160,38 @@ object main {
         trainingDataCentered, testDataCentered, secondOutputClass, outputTrainFileName,
         outputTestFileName)
     }
+
+    // distribute training data over columns
+    val (trainingDataCenteredOverCols, responseTrain, nFeatsTrain) =
+      preprocess.transpose.distributeOverColumns(
+        trainingDataCentered,
+        nPartitions,
+        sparse
+      )
+
+    // distribute test data over columns
+    val (testDataCenteredOverCols, responseTest, nFeatsTest) =
+      preprocess.transpose.distributeOverColumns(
+        testDataCentered,
+        nPartitions,
+        sparse
+      )
+
+    // save training and test data, distributed over columns
+    save.saveAsObjectFile(trainingDataCenteredOverCols,  outputTrainFileName + "-colwise")
+    save.saveAsObjectFile(testDataCenteredOverCols, outputTestFileName + "-colwise")
+
+    // save response vectors
+    scala.tools.nsc.io.File(outputTrainFileName + "-responseTrain.txt")
+      .writeAll(responseTrain.toArray.mkString(" "))
+
+    scala.tools.nsc.io.File(outputTestFileName + "-responseTest.txt")
+      .writeAll(responseTest.toArray.mkString(" "))
+
+    // save number of feature vectors
+    val nFeats = max(nFeatsTrain, nFeatsTest)
+    scala.tools.nsc.io.File(outputTrainFileName + "-nFeats.txt")
+      .writeAll(nFeats.toString)
 
     println("Application finished running successfully!")
   }

@@ -1,20 +1,18 @@
 name := "LOCO"
 
-version := "0.1"
+version := "0.2.0"
 
 scalaVersion := "2.10.4"
 
 // additional libraries
+{
 libraryDependencies ++= Seq(
-  "org.apache.spark" %% "spark-core" % "1.3.1" % "provided",
-  "org.apache.spark"  %% "spark-mllib" % "1.3.1",
+  "org.apache.spark" %% "spark-core" % "1.5.1" % "provided",
+  "org.apache.spark"  %% "spark-mllib" % "1.5.1",
   "org.scalanlp" %% "breeze" % "0.11.2",
   "org.scalanlp" %% "breeze-natives" % "0.11.2",
-  "cc.factorie" % "factorie_2.10" % "1.1.1",
-  "com.github.fommil.netlib" % "all" % "1.1.2",
-  "com.nativelibs4java" % "jnaerator" % "0.11",
-  "net.java.dev.jna" % "jna" % "3.4.0"
-)
+  "com.github.fommil.netlib" % "all" % "1.1.2" pomOnly())
+}
 
 resolvers ++= Seq(
   "IESL Release" at "http://dev-iesl.cs.umass.edu/nexus/content/groups/public",
@@ -22,7 +20,7 @@ resolvers ++= Seq(
 )
 
 // Configure jar named used with the assembly plug-in
-assemblyJarName in assembly := "LOCO-assembly-0.1.jar"
+assemblyJarName in assembly := "LOCO-assembly-0.2.0.jar"
 
 // assembly merge strategy
 assemblyMergeStrategy in assembly := {

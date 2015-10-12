@@ -4,7 +4,7 @@ $SPARK_HOME/bin/spark-submit \
 --class "LOCO.driver" \
 --master local[4] \
 --driver-memory 1G \
-target/scala-2.10/LOCO-assembly-0.1.jar \
+target/scala-2.10/LOCO-assembly-0.1.5.jar \
 --classification=false \
 --optimizer=SDCA \
 --numIterations=5000 \
@@ -14,7 +14,7 @@ target/scala-2.10/LOCO-assembly-0.1.jar \
 --trainingDatafile="../data/climate_train.txt" \
 --testDatafile="../data/climate_test.txt" \
 --center=true \
---Proj=sparse \
+--projection=SDCT \
 --concatenate=true \
 --CVKind=none \
 --lambda=70 \

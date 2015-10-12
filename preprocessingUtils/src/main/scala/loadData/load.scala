@@ -1,6 +1,7 @@
 package preprocessingUtils.loadData
 
 import scala.reflect.ClassTag
+import scala.io.Source
 
 import com.esotericsoftware.kryo.io.Input
 import org.apache.hadoop.io.{BytesWritable, NullWritable}
@@ -38,11 +39,12 @@ object load {
       dataFile: String,
       nPartitions: Int,
       textDataFormat : String,
+      sparse : Boolean,
       separateTrainTestFiles : Boolean,
       trainingDatafile : String,
       testDatafile : String,
       proportionTest : Double,
-      seed : Int) : (RDD[Array[Double]], RDD[Array[Double]]) = {
+      seed : Int) : (RDD[LabeledPoint], RDD[LabeledPoint]) = {
 
     // load file(s) and if needed, split into training and test set
     textDataFormat match {
@@ -50,41 +52,51 @@ object load {
           // OPTION 1: LIBSVM format
           if (!separateTrainTestFiles) {
             val splits =
-              loadLibSVMFile(sc, dataFile, minPartitions = nPartitions)
+              loadLibSVMFile(sc, dataFile, nPartitions, sparse)
                 .randomSplit(Array(1.0 - proportionTest, proportionTest), seed = seed)
             (splits(0), splits(1))
           } else {
-            (loadLibSVMFile(sc, trainingDatafile, minPartitions = nPartitions),
-              loadLibSVMFile(sc, testDatafile, minPartitions = nPartitions))
+            (loadLibSVMFile(sc, trainingDatafile, nPartitions, sparse),
+              loadLibSVMFile(sc, testDatafile, nPartitions, sparse))
           }
         case "spaces" =>
           // OPTION 2: First entry on each line is the response,
           // separated by a space from the features, features are separated by spaces
           if (!separateTrainTestFiles) {
             val splits =
-              loadSpaceSeparatedFile_overRows(sc, dataFile, minPartitions = nPartitions)
+              loadSpaceSeparatedFile_overRows(sc, dataFile, nPartitions, sparse)
                 .randomSplit(Array(1.0 - proportionTest, proportionTest), seed = seed)
             (splits(0), splits(1))
           } else {
-            (loadSpaceSeparatedFile_overRows(sc, trainingDatafile, minPartitions = nPartitions),
-              loadSpaceSeparatedFile_overRows(sc, testDatafile, minPartitions = nPartitions))
+            (loadSpaceSeparatedFile_overRows(sc, trainingDatafile, nPartitions, sparse),
+              loadSpaceSeparatedFile_overRows(sc, testDatafile, nPartitions, sparse))
           }
         case "comma" =>
           // OPTION 3: First entry on each line is the response, separated by a comma from the
           // features, features are separated by spaces
           if (!separateTrainTestFiles) {
             val splits =
-              loadResponseWithCommaSeparatedFile_overRows(sc, dataFile, minPartitions = nPartitions)
+              loadResponseWithCommaSeparatedFile_overRows(sc, dataFile, nPartitions, sparse)
                 .randomSplit(Array(1.0 - proportionTest, proportionTest), seed = seed)
             (splits(0), splits(1))
           } else {
-            (loadResponseWithCommaSeparatedFile_overRows(sc, trainingDatafile, nPartitions),
-              loadResponseWithCommaSeparatedFile_overRows(sc, testDatafile, nPartitions))
+            (loadResponseWithCommaSeparatedFile_overRows(sc, trainingDatafile, nPartitions, sparse),
+              loadResponseWithCommaSeparatedFile_overRows(sc, testDatafile, nPartitions, sparse))
           }
         case _ => throw new Error("No such text file option! textDataFormat must be either " +
           "'libsvm', 'spaces' or 'comma'.")
     }
   }
+
+  /*
+  Read response vector after saving with '.toArray.mkString(" ")'
+   */
+  def readResponse(responsePath: String) : mllib.linalg.Vector = {
+    // load data
+    val responseString = Source.fromFile(responsePath).getLines().flatMap(x => x.split(" ")).map(_.toDouble).toArray
+    Vectors.dense(responseString)
+  }
+
 
   /**
    * If the provided data file(s) is/are object files
@@ -158,6 +170,17 @@ object load {
 
   /**
    * Maps an RDD containing arrays of doubles where the response is the respective first
+   * entry to an RDD containing elements of type LabeledPoint with SparseVectors.
+   *
+   * @param data RDD containing arrays of doubles
+   * @return RDD containing elements of type LabeledPoint
+   */
+  def rddDoubleArrayToLabeledPointSparse(data : RDD[Array[Double]]) : RDD[LabeledPoint] = {
+    data.map(x => LabeledPoint(x.head, Vectors.dense(x.tail).toSparse))
+  }
+
+  /**
+   * Maps an RDD containing arrays of doubles where the response is the respective first
    * entry to an RDD containing elements of type DataPoint.
    *
    * @param data RDD containing arrays of doubles
@@ -183,6 +206,12 @@ object load {
     LabeledPoint(point.head, Vectors.dense(point.tail))
   }
 
+  /** Maps an array of doubles where the response is the first entry to a LabeledPoint with
+    * sparse observations. */
+  def doubleArrayToLabeledPointSparse(point : Array[Double]) : LabeledPoint = {
+    LabeledPoint(point.head, Vectors.dense(point.tail).toSparse)
+  }
+
   /** Maps an array of doubles where the response is the first entry to a DataPoint. */
   def doubleArrayToDataPoint(point : Array[Double]) : DataPoint = {
    DataPoint(point.head, breeze.linalg.Vector(point.tail))
@@ -191,6 +220,11 @@ object load {
   /** Map a DataPoint to a LabeledPoint. */
   def dataPointToLabeledPoint(point : DataPoint) : LabeledPoint = {
     LabeledPoint(point.label, Vectors.dense(point.features.toArray))
+  }
+
+  /** Map a DataPoint to a LabeledPoint with sparse observations.. */
+  def dataPointToLabeledPointSparse(point : DataPoint) : LabeledPoint = {
+    LabeledPoint(point.label, Vectors.dense(point.features.toArray).toSparse)
   }
 
   /** Map a LabeledPoint to a DataPoint. */
@@ -203,13 +237,36 @@ object load {
    Array(point.label) ++ point.features.toArray
   }
 
+  /** Map a LabeledPoint dense to a LabeledPoint sparse. */
+  def labeledPointDenseToLabeledPointSparse(point : LabeledPoint) : LabeledPoint = {
+    LabeledPoint(point.label, point.features.toSparse)
+  }
+
+  /** Map a LabeledPoint sparse to a LabeledPoint dense. */
+  def labeledPointSparseToLabeledPointDense(point : LabeledPoint) : LabeledPoint = {
+    LabeledPoint(point.label, point.features.toDense)
+  }
+
   /** Cast an Array[Double] or a DataPoint to a LabeledPoint. */
   def castToLabeledPoint[T](x : T): LabeledPoint = {
 
     x match {
       case a : Array[Double] => doubleArrayToLabeledPoint(x.asInstanceOf[Array[Double]])
       case b : DataPoint => dataPointToLabeledPoint(x.asInstanceOf[DataPoint])
-      case c : LabeledPoint => x.asInstanceOf[LabeledPoint]
+      case c : LabeledPoint => labeledPointSparseToLabeledPointDense(x.asInstanceOf[LabeledPoint])
+      case _ => throw new Error("Input type has to be an RDD containing elements of type" +
+        "Array[Double] or DataPoint!")
+    }
+
+  }
+
+  /** Cast an Array[Double] or a DataPoint to a LabeledPoint sparse. */
+  def castToLabeledPointSparse[T](x : T): LabeledPoint = {
+
+    x match {
+      case a : Array[Double] => doubleArrayToLabeledPointSparse(x.asInstanceOf[Array[Double]])
+      case b : DataPoint => dataPointToLabeledPointSparse(x.asInstanceOf[DataPoint])
+      case c : LabeledPoint => labeledPointDenseToLabeledPointSparse(x.asInstanceOf[LabeledPoint])
       case _ => throw new Error("Input type has to be an RDD containing elements of type" +
         "Array[Double] or DataPoint!")
     }
@@ -221,6 +278,7 @@ object load {
       sc: SparkContext,
       dataFile: String,
       nPartitions: Int,
+      sparse : Boolean,
       separateTrainTestFiles : Boolean,
       trainingDatafile : String,
       testDatafile : String,
@@ -233,7 +291,11 @@ object load {
         sc, dataFile, nPartitions, separateTrainTestFiles, trainingDatafile, testDatafile,
         proportionTest, seed)
 
-    (train.map(x => castToLabeledPoint[T](x)), test.map(x => castToLabeledPoint[T](x)))
+    if(sparse)
+      (train.map(x => castToLabeledPointSparse[T](x)), test.map(x => castToLabeledPointSparse[T](x)))
+    else
+      (train.map(x => castToLabeledPoint[T](x)), test.map(x => castToLabeledPoint[T](x)))
+
 
   }
 }
