@@ -1,6 +1,8 @@
 package preprocessingUtils.loadData
 
 import org.apache.spark.SparkContext
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -19,7 +21,8 @@ object loadLibSVM {
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
-      minPartitions: Int): RDD[Array[Double]] = {
+      minPartitions: Int,
+      sparse : Boolean): RDD[LabeledPoint] = {
 
     // parse text file
     val parsed = sc.textFile(path, minPartitions)
@@ -50,7 +53,10 @@ object loadLibSVM {
       for (a <- 0 until indices.length) {
         features(indices(a) - 1) = values(a)
       }
-      Array(label.toDouble) ++ features.map(_.toDouble)
+      if(sparse)
+        LabeledPoint(label.toDouble, Vectors.dense(features.map(_.toDouble)).toSparse)
+      else
+        LabeledPoint(label.toDouble, Vectors.dense(features.map(_.toDouble)))
     }
   }
 

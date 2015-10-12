@@ -1,64 +1,132 @@
 package LOCO.utils
 
-import breeze.linalg.Vector
+import breeze.linalg._
 import scala.collection.mutable
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 
-import preprocessingUtils.DataPoint
-import preprocessingUtils.utils.metrics
+import preprocessingUtils.FeatureVectorLP
+import preprocessing.createLocalMatrices
 
 object LOCOUtils {
 
   /**
-   * Checks whether the provided projection dimension is indeed smaller than the number
-   * of raw features that are to be compressed.
+   *  Computes the classification error, when the data is distributed over columns
    */
-  def isValidProjectionDim(
-      nProjectionDim : Int,
-      nPartitions : Int,
-      nFeatures : Int) : Boolean = {
+  def computeClassificationError_overCols(
+                      sc : SparkContext,
+                      coefficientVector : DenseVector[Double],
+                      localMatsRDD: RDD[(Int, (List[Int], Matrix[Double], Option[Matrix[Double]]))],
+                      response : DenseVector[Double]
+                      ) = {
 
-    // compute number of raw features on one worker
-    val nRawFeatures = nFeatures/nPartitions + 1
+    // broadcast coefficients
+    val betas = sc.broadcast(coefficientVector)
 
-    // projection dimension needs to be smaller
-    nProjectionDim < nRawFeatures
+    // compute predictions
+    val predictions : DenseVector[Double] =
+      localMatsRDD.map{
+        case(workerID, (indicesList, localRawFeatureMatrix, localRawFeatureTestMatrix)) =>
+          localPrediction((workerID, (indicesList, localRawFeatureMatrix)), betas.value)
+      }.reduce(_ + _)
+
+      sum((response :* predictions).map(x => if(x > 0.0) 0.0 else 1.0))/response.length.toDouble
   }
+
+
+  /**
+   *  Computes the mean squared error, when the data is distributed over columns
+   */
+  def compute_MSE_overCols(
+                      sc : SparkContext,
+                      coefficientVector : DenseVector[Double],
+                      localMatsRDD: RDD[(Int, (List[Int], Matrix[Double], Option[Matrix[Double]]))],
+                      response : DenseVector[Double]
+                      ) = {
+
+    // broadcast coefficients
+    val betas = sc.broadcast(coefficientVector)
+
+    // compute predictions
+    val predictions : DenseVector[Double] =
+      localMatsRDD.map{
+        case(workerID, (indicesList, localRawFeatureMatrix, localRawFeatureTestMatrix)) =>
+          localPrediction((workerID, (indicesList, localRawFeatureMatrix)), betas.value)
+      }.reduce(_ + _)
+
+      math.pow(norm(response - predictions), 2)
+  }
+
+  /**
+   *  Computes the mean squared error, standardized by the squared norm of the centered response,
+   *  when the data is distributed over columns
+   */
+  def compute_standardizedMSE_overCols(
+                      sc : SparkContext,
+                      coefficientVector : DenseVector[Double],
+                      localMatsRDD: RDD[(Int, (List[Int], Matrix[Double], Option[Matrix[Double]]))],
+                      response : DenseVector[Double]//,
+                      ) = {
+
+    // broadcast coefficients
+    val betas = sc.broadcast(coefficientVector)
+
+    // compute predictions
+    val predictions : DenseVector[Double] =
+      localMatsRDD.map{
+        case(workerID, (indicesList, localRawFeatureMatrix, localRawFeatureTestMatrix)) =>
+         localPrediction((workerID, (indicesList, localRawFeatureMatrix)), betas.value)
+      }.reduce(_ + _)
+
+    // compute MSE
+    val num : Double = math.pow(norm(response - predictions), 2)
+    val meanResponse = sum(response)/response.length.toDouble
+    val denom : Double = math.pow(norm(response - meanResponse), 2)
+
+    num/denom
+  }
+
+  def localPrediction(
+                     localRawFeatures : (Int, (List[Int], Matrix[Double])),
+                     coefficientVector : DenseVector[Double]
+                     ) : DenseVector[Double] = {
+
+    // sort coefficientVector according to list of coefficients and compute prediction
+    val coefIndices = localRawFeatures._2._1
+    val localPrediction = localRawFeatures._2._2 * coefficientVector(coefIndices)
+    localPrediction.toDenseVector
+  }
+
 
   /** Computes, prints and saves summary statistics. **/
   def printSummaryStatistics(
      sc : SparkContext,
      classification : Boolean,
-     optimizer : String,
      numIterations : Int,
      timeStampStart : Long,
      timeDifference : Long,
      RPTime : Long,
+     communicationTime : Long,
      restTime : Long,
-     betaLoco : Vector[Double],
-     trainingDataNotCentered : RDD[DataPoint],
-     testDataNotCentered : RDD[DataPoint],
-     center : Boolean,
-     centerFeaturesOnly : Boolean,
-     meanResponse : Double,
-     colMeans: Vector[Double],
-     dataFormat : String,
-     separateTrainTestFiles : Boolean,
+     CVTime : Long,
+     betaLoco : DenseVector[Double],
+     trainingData : RDD[FeatureVectorLP],
+     testData : RDD[FeatureVectorLP],
+     responseTrain : DenseVector[Double],
+     responseTest : DenseVector[Double],
      trainingDatafile : String,
      testDatafile : String,
-     dataFile : String,
-     proportionTest : Double,
+     responsePathTrain : String,
+     responsePathTest : String,
      nPartitions : Int,
      nExecutors : Int,
      nFeatsProj : Int,
      projection : String,
-     flagFFTW : Int,
      useSparseStructure : Boolean,
      concatenate : Boolean,
      lambda : Double,
-     CVKind : String,
+     CV : Boolean,
      lambdaSeq : Seq[Double],
      kFold : Int,
      seed : Int,
@@ -74,27 +142,21 @@ object LOCOUtils {
     val printUntil = math.min(20, betaLoco.length)
     println(Vector(betaLoco(0 until printUntil).toArray))
 
-    val colMeansBroadcast = if(center || centerFeaturesOnly) sc.broadcast(colMeans) else null
-
-    // center training data by row
-    val trainingData_byRow_centered = trainingDataNotCentered.map { elem =>
-      if (center) DataPoint(elem.label - meanResponse, elem.features - colMeansBroadcast.value)
-      else if (centerFeaturesOnly) DataPoint(elem.label, elem.features - colMeansBroadcast.value)
-      else elem
-    }.cache()
-
-    // center test data by row
-    val testData_byRow_centered = testDataNotCentered.map { elem =>
-      if (center) DataPoint(elem.label - meanResponse, elem.features - colMeansBroadcast.value)
-      else if (centerFeaturesOnly) DataPoint(elem.label, elem.features - colMeansBroadcast.value)
-      else elem
-    }.cache()
-
     val MSE_train =
       if(classification){
-        metrics.computeClassificationError(betaLoco, trainingData_byRow_centered)
+        computeClassificationError_overCols(
+          sc,
+          betaLoco,
+          createLocalMatrices(trainingData, useSparseStructure, responseTrain.length, null),
+          responseTrain
+        )
       }else{
-        metrics.compute_standardizedMSE(betaLoco, trainingData_byRow_centered)
+        compute_standardizedMSE_overCols(
+          sc,
+          betaLoco,
+          createLocalMatrices(trainingData, useSparseStructure, responseTrain.length, null),
+          responseTrain
+          )
       }
 
     if (classification)
@@ -102,13 +164,22 @@ object LOCOUtils {
     else
       println("Training Mean Squared Error = " + MSE_train)
 
-    trainingData_byRow_centered.unpersist()
 
     val MSE_test =
       if(classification){
-        metrics.computeClassificationError(betaLoco, testData_byRow_centered)
+        computeClassificationError_overCols(
+          sc,
+          betaLoco,
+          createLocalMatrices(testData, useSparseStructure, responseTest.length, null),
+          responseTest
+        )
       }else{
-        metrics.compute_standardizedMSE(betaLoco, testData_byRow_centered)
+        compute_standardizedMSE_overCols(
+          sc,
+          betaLoco,
+          preprocessing.createLocalMatrices(testData, useSparseStructure, responseTest.length, null),
+          responseTest
+        )
       }
 
     if(classification)
@@ -116,8 +187,6 @@ object LOCOUtils {
     else
       println("Test Mean Squared Error = " + MSE_test)
 
-
-    testData_byRow_centered.unpersist()
 
     // save test MSE to file
     if(saveToHDFS)
@@ -150,36 +219,29 @@ object LOCOUtils {
     build.append("\nTraining MSE :           " + MSE_train)
     build.append("\nTest MSE:                " + MSE_test)
     build.append("\nclassification:          " + classification)
-    build.append("\noptimizer:               " + optimizer)
     build.append("\nnumIterations:           " + numIterations)
     build.append("\ncheckDualityGap:         " + checkDualityGap)
     build.append("\nstoppingDualityGap:      " + stoppingDualityGap)
     build.append("\nnPartitions:             " + nPartitions)
     build.append("\nnExecutors:              " + nExecutors)
-    build.append("\ndataFormat:              " + dataFormat)
-    build.append(if(separateTrainTestFiles){
-                 "\ntrainingDatafile:        " + trainingDatafile +
-                 "\ntestDatafile:            " + testDatafile}
-                 else{
-                 "\ndataFile:                " + dataFile +
-                 "\nproportionTest:          " + proportionTest})
-    build.append("\nseed:                    " + seed)
-
-    build.append("\ncenter:                  " + center)
-    build.append("\ncenterFeaturesOnly:      " + centerFeaturesOnly)
-
-    build.append("\nProjection:              " + projection)
-    build.append("\nflagFFTW:                " + flagFFTW)
+    build.append("\ntrainingDatafile:        " + trainingDatafile)
+    build.append("\nresponsePathTrain:       " + responsePathTrain)
+    build.append("\ntestDatafile:            " + testDatafile)
+    build.append("\nresponsePathTest:        " + responsePathTest)
     build.append("\nuseSparseStructure:      " + useSparseStructure)
+    build.append("\nseed:                    " + seed)
+    build.append("\nProjection:              " + projection)
     build.append("\nnFeatsProj:              " + nFeatsProj)
     build.append("\nconcatenate:             " + concatenate)
-    build.append("\nCVKind:                  " + CVKind)
-    build.append(if(CVKind == "global")
+    build.append("\nCV:                      " + CV)
+    build.append(if(CV)
                  "\nlambdaGlobal:            " + lambdaGlobal)
     build.append("\nRun time LOCO:           " + timeDifference)
     build.append("\nRP time LOCO:            " + RPTime)
+    build.append("\nCommunication time LOCO: " + communicationTime)
     build.append("\nRest time LOCO:          " + restTime)
-    build.append(if(CVKind == "none")
+    build.append("\nCV time LOCO:            " + CVTime)
+    build.append(if(!CV)
                  "\nlambda (provided):       " + lambda
                  else{
                  "\nkfold:                   " + kFold +

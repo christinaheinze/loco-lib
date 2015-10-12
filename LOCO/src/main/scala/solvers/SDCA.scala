@@ -7,21 +7,26 @@ import preprocessingUtils.DataPoint
 
 object SDCA {
   /**
-   * This is an implementation of LocalDualMethod, here LocalSDCA (coordinate ascent),
-   * with taking the information of the other workers into account, by respecting the
-   * shared wInit vector.
-   * Here we perform coordinate updates for the SVM dual objective (hinge loss).
+   * Runs SDCA on local data matrix.
    *
    * Note that SDCA for hinge-loss is equivalent to LibLinear, where using the
    * regularization parameter  C = 1.0/(lambda*numExamples), and re-scaling
    * the alpha variables with 1/C.
    *
-   * @param localData the local data examples
+   * @param localData Local data examples
+   * @param response Response vector
    * @param localIters number of local coordinates to update
-   * @param lambda
-   * @param n
-   * @param seed
-   * @return deltaAlpha and deltaW, summarizing the performed local changes, see paper
+   * @param lambda Regularization parameter
+   * @param n Number of observations
+   * @param seed Random seed
+   * @param checkDualityGap Specify whether the duality gap should be computed after each iteration.
+   *                        Note that this is expensive as it requires a pass over the entire (local)
+   *                        data set. Should only be used for tuning purposes.
+   * @param stoppingDualityGap Specify the size of the duality gap at which the optimization should
+   *                           end. If it is not reached after numIterations, the optimization ends
+   *                           nonetheless.
+   *
+   * @return alpha - dual solution vector
    */
   def localSDCA(
       localData: DenseMatrix[Double],

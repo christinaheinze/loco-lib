@@ -1,8 +1,9 @@
 package preprocessingUtils.loadData
 
 import org.apache.spark.SparkContext
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-
+import org.apache.spark.mllib.linalg.Vectors
 
 object loadSpaces {
 
@@ -19,14 +20,19 @@ object loadSpaces {
   def loadSpaceSeparatedFile_overRows(
       sc: SparkContext,
       path: String,
-      minPartitions: Int): RDD[Array[Double]] = {
+      minPartitions: Int,
+      sparse : Boolean): RDD[LabeledPoint] = {
 
     // load data
     val data = sc.textFile(path, minPartitions)
 
     // map each element to Array[Double]
     data.map { line =>
-      line.split(' ').filterNot(elm => elm == "").map(_.toDouble)
+      val observation = line.split(' ').filterNot(elm => elm == "").map(_.toDouble)
+      if(sparse)
+        LabeledPoint(observation.head, Vectors.dense(observation.tail).toSparse)
+      else
+        LabeledPoint(observation.head, Vectors.dense(observation.tail))
     }
   }
 
@@ -43,7 +49,8 @@ object loadSpaces {
   def loadResponseWithCommaSeparatedFile_overRows(
       sc: SparkContext,
       path: String,
-      minPartitions: Int): RDD[Array[Double]] = {
+      minPartitions: Int,
+      sparse : Boolean): RDD[LabeledPoint] = {
 
     // load data
     val data = sc.textFile(path, minPartitions)
@@ -51,7 +58,11 @@ object loadSpaces {
     // map each element to Array[Double]
     data.map { line =>
       val parts = line.split(',')
-      Array(parts(0).toDouble) ++ parts(1).split(' ').filterNot(elm => elm == "").map(_.toDouble)
+      val observation = Array(parts(0).toDouble) ++ parts(1).split(' ').filterNot(elm => elm == "").map(_.toDouble)
+      if(sparse)
+        LabeledPoint(observation.head, Vectors.dense(observation.tail).toSparse)
+      else
+        LabeledPoint(observation.head, Vectors.dense(observation.tail))
     }
   }
 
