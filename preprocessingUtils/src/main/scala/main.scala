@@ -36,9 +36,9 @@ object main {
     // "libsvm", "spaces" or "comma"
     val textDataFormat = options.getOrElse("textDataFormat", "spaces")
     // input path
-    val dataFile = options.getOrElse("dataFile", "../data/E2006")
+    val dataFile = options.getOrElse("dataFile", "../data/dogs_vs_cats_n5000.txt")
     // provide training and test set as separate files?
-    val separateTrainTestFiles = options.getOrElse("separateTrainTestFiles", "true").toBoolean
+    val separateTrainTestFiles = options.getOrElse("separateTrainTestFiles", "false").toBoolean
     // training input path
     val trainingDatafile =
       options.getOrElse("trainingDatafile", "../data/climate_train.txt")
@@ -53,21 +53,21 @@ object main {
     val timestamp = System.currentTimeMillis.toString
     // file name for training file output
     val outputTrainFileName =
-      options.getOrElse("outputTrainFileName", "output/outTrain" + timestamp)
+      options.getOrElse("outputTrainFileName", "output/dogs_vs_cats_small_train")
     // file name for test file output
-    val outputTestFileName = options.getOrElse("outputTestFileName", "output/outTest" + timestamp)
+    val outputTestFileName = options.getOrElse("outputTestFileName", "output/dogs_vs_cats_small_test")
     // specify class of output: DataPoint, LabeledPoint or DoubleArray
-    val outputClass = options.getOrElse("outputClass", "DataPoint")
+    val outputClass = options.getOrElse("outputClass", "LabeledPoint")
     // if two different output formats are desired, set to true
     val twoOutputClasses = options.getOrElse("twoOutputClasses", "false").toBoolean
     // specify second output format
     val secondOutputClass = options.getOrElse("secondOutputClass", "LabeledPoint")
     // center the features to have mean zero
-    val centerFeatures = options.getOrElse("centerFeatures", "false").toBoolean
+    val centerFeatures = options.getOrElse("centerFeatures", "true").toBoolean
     // center the response to have mean zero
     val centerResponse = options.getOrElse("centerResponse", "false").toBoolean
     // scale the features to have unit variance
-    val scaleFeatures = options.getOrElse("scaleFeatures", "false").toBoolean
+    val scaleFeatures = options.getOrElse("scaleFeatures", "true").toBoolean
     // scale the response to have unit variance
     val scaleResponse = options.getOrElse("scaleResponse", "false").toBoolean
 

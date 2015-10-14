@@ -16,7 +16,6 @@ preprocessingUtils/.idea
 
 temp
 data/climate-serialized
-dogs_vs_cats_small_test-responseTest.txt
 data/dogs_vs_cats-serialized
 data/dogs_vs_cats_small_test-colwise
 data/dogs_vs_cats_small_test-rowwiseLabeledPoint
@@ -24,5 +23,6 @@ data/dogs_vs_cats_small_train-colwise
 data/dogs_vs_cats_small_train-rowwiseLabeledPoint
 dogs_vs_cats_small_train-responseTrain.txt
 dogs_vs_cats_small_train-nFeats.txt
-dogs_vs_cats-serialized.zip
+dogs_vs_cats_small_test-responseTest.txt
 climate-serialized.zip
+dogs_vs_cats-serialized.zip
