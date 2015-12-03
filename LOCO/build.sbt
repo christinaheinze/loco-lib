@@ -1,6 +1,6 @@
 name := "LOCO"
 
-version := "0.2.0"
+version := "0.2.1"
 
 scalaVersion := "2.10.4"
 
@@ -20,7 +20,7 @@ resolvers ++= Seq(
 )
 
 // Configure jar named used with the assembly plug-in
-assemblyJarName in assembly := "LOCO-assembly-0.2.0.jar"
+assemblyJarName in assembly := "LOCO-assembly-0.2.1.jar"
 
 // assembly merge strategy
 assemblyMergeStrategy in assembly := {

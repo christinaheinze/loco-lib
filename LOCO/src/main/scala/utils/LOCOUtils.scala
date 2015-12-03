@@ -133,6 +133,9 @@ object LOCOUtils {
      lambdaGlobal : Double,
      checkDualityGap : Boolean,
      stoppingDualityGap : Double,
+     privateLOCO : Boolean,
+     privateEps : Double,
+     privateDelta : Double,
      saveToHDFS : Boolean,
      directoryName : String) : Unit = {
 
@@ -219,6 +222,9 @@ object LOCOUtils {
     build.append("\nTraining MSE :           " + MSE_train)
     build.append("\nTest MSE:                " + MSE_test)
     build.append("\nclassification:          " + classification)
+    build.append("\nprivateLOCO:             " + privateLOCO)
+    build.append("\nprivateEps:              " + privateEps)
+    build.append("\nprivateDelta:            " + privateDelta)
     build.append("\nnumIterations:           " + numIterations)
     build.append("\ncheckDualityGap:         " + checkDualityGap)
     build.append("\nstoppingDualityGap:      " + stoppingDualityGap)

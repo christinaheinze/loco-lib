@@ -64,7 +64,10 @@ object CVUtils {
       k : Int,
       numIterations : Int,
       checkDualityGap : Boolean,
-      stoppingDualityGap : Double) : Double = {
+      stoppingDualityGap : Double,
+      privateLOCO : Boolean,
+      privateEps : Double,
+      privateDelta : Double) : Double = {
 
     // get number of observations
     val nObs = response.length
@@ -94,7 +97,8 @@ object CVUtils {
         runForLambdaSequence(
           sc, classification, seed, data, response, (trainingIndices, testIndices), nFeats,
           nPartitions, nExecutors, projection, useSparseStructure, concatenate, nFeatsProj,
-          lambdaSeq, numIterations, checkDualityGap, stoppingDualityGap)
+          lambdaSeq, numIterations, checkDualityGap, stoppingDualityGap,
+          privateLOCO, privateEps, privateDelta)
 
       // return performance for sequence of lambda values
       performanceOfParams(fold-1) = lambdasAndErrorOnFold
@@ -169,10 +173,15 @@ object CVUtils {
       lambdaSeq : Seq[Double],
       numIterations : Int,
       checkDualityGap : Boolean,
-      stoppingDualityGap : Double) : Array[(Double, Double)] = {
+      stoppingDualityGap : Double,
+      privateLOCO : Boolean,
+      privateEps : Double,
+      privateDelta : Double) : Array[(Double, Double)] = {
 
     // get number of observations
     val nObs = trainingTestIndices._1.length
+    val naive = if(nFeatsProj == 0) true else false
+
 
     // create local matrices with 1) training observations and 2) test oberservations
     val localMats: RDD[(Int, (List[Int], Matrix[Double], Option[Matrix[Double]]))] =
@@ -180,7 +189,8 @@ object CVUtils {
 
     // project local matrices
     val rawAndRandomFeats =
-      project(localMats, projection, useSparseStructure, nFeatsProj, nObs, nFeats, randomSeed, nPartitions)
+      project(localMats, projection, useSparseStructure, nFeatsProj, nObs, nFeats, randomSeed,
+        nPartitions, privateLOCO, privateEps, privateDelta)
 
     // persist raw and random features
     rawAndRandomFeats.persist(StorageLevel.MEMORY_AND_DISK)
@@ -229,7 +239,7 @@ object CVUtils {
           localDual.runLocalDualConcatenate_lambdaSeq(
             oneLocalMat, randomProjectionsConcatenated.value, responseTrainBC.value, lambdaSeq,
             nObs, classification, numIterations, nFeatsProj, randomSeed, checkDualityGap,
-            stoppingDualityGap)
+            stoppingDualityGap, naive)
         }
       } else {
         // when RPs are to be added
@@ -237,7 +247,7 @@ object CVUtils {
           localDual.runLocalDualAdd_lambdaSeq(
             oneLocalMat, randomProjectionsAdd.value, responseTrainBC.value, lambdaSeq, nObs,
             classification, numIterations, nFeatsProj, randomSeed, checkDualityGap,
-            stoppingDualityGap)
+            stoppingDualityGap, naive)
         }
       }
     }

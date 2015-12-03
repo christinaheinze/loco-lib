@@ -50,45 +50,48 @@ object driver {
     val nExecutors = options.getOrElse("nExecutors","1").toInt
     // training input path
     val trainingDatafile =
-      options.getOrElse("trainingDatafile", "../data/dogs_vs_cats-serialized/dogs_vs_cats_small_train-colwise/")
-//      options.getOrElse("trainingDatafile", "../data/climate-serialized/climate-train-colwise/")
+//      options.getOrElse("trainingDatafile", "../data/dogs_vs_cats-serialized/dogs_vs_cats_small_train-colwise/")
+      options.getOrElse("trainingDatafile", "../data/climate-serialized/pressure_train_-colwise/")
     // test input path
     val testDatafile =
-        options.getOrElse("testDatafile", "../data/dogs_vs_cats-serialized/dogs_vs_cats_small_test-colwise/")
-//        options.getOrElse("testDatafile", "../data/climate-serialized/climate-test-colwise/")
+//        options.getOrElse("testDatafile", "../data/dogs_vs_cats-serialized/dogs_vs_cats_small_test-colwise/")
+        options.getOrElse("testDatafile", "../data/climate-serialized/pressure_test_-colwise/")
     // response vector - training
     val responsePathTrain =
-      options.getOrElse("responsePathTrain", "../data/dogs_vs_cats-serialized/dogs_vs_cats_small_train-responseTrain.txt")
-//      options.getOrElse("responsePathTrain", "../data/climate-serialized/climate-responseTrain.txt")
+//      options.getOrElse("responsePathTrain", "../data/dogs_vs_cats-serialized/dogs_vs_cats_small_train-responseTrain.txt")
+      options.getOrElse("responsePathTrain", "../data/climate-serialized/pressure_train_-responseTrain.txt")
     // response vector - test
     val responsePathTest =
-      options.getOrElse("responsePathTest", "../data/dogs_vs_cats-serialized/dogs_vs_cats_small_test-responseTest.txt")
-//      options.getOrElse("responsePathTest", "../data/climate-serialized/climate-responseTest.txt")
+//      options.getOrElse("responsePathTest", "../data/dogs_vs_cats-serialized/dogs_vs_cats_small_test-responseTest.txt")
+      options.getOrElse("responsePathTest", "../data/climate-serialized/pressure_test_-responseTest.txt")
     // number of features
-    val nFeatsPath = options.getOrElse("nFeats", "../data/dogs_vs_cats-serialized/dogs_vs_cats_small_train-nFeats.txt")
-//      options.getOrElse("nFeats", "../data/climate-serialized/climate-nFeats.txt")
+    val nFeatsPath = //options.getOrElse("nFeats", "../data/dogs_vs_cats-serialized/dogs_vs_cats_small_train-nFeats.txt")
+      options.getOrElse("nFeats", "../data/climate-serialized/pressure_train_-nFeats.txt")
     // random seed
-    val randomSeed = options.getOrElse("seed", "3").toInt
+    val randomSeed = options.getOrElse("seed", "1").toInt
     // shall sparse data structures be used?
     val useSparseStructure = options.getOrElse("useSparseStructure", "false").toBoolean
 
     // 2) specify algorithm, loss function, and optimizer (if applicable)
 
     // specify whether classification or ridge regression shall be used
-    val classification = options.getOrElse("classification", "true").toBoolean
+    val classification = options.getOrElse("classification", "false").toBoolean
     // number of iterations used in SDCA
-    val numIterations = options.getOrElse("numIterations", "5000").toInt
+    val numIterations = options.getOrElse("numIterations", "20000").toInt
     // set duality gap as convergence criterion
     val stoppingDualityGap = options.getOrElse("stoppingDualityGap", "0.01").toDouble
     // specify whether duality gap as convergence criterion shall be used
     val checkDualityGap = options.getOrElse("checkDualityGap", "false").toBoolean
+    val privateLOCO = options.getOrElse("private", "true").toBoolean
+    val privateEps = options.getOrElse("privateEps", "1").toDouble
+    val privateDelta = options.getOrElse("privateDelta", "0.01").toDouble
 
     // 3) algorithm-specific inputs
 
     // specify projection (sparse or SDCT)
     val projection = options.getOrElse("projection", "SDCT")
     // specify projection dimension
-    val nFeatsProj = options.getOrElse("nFeatsProj", "200").toInt
+    val nFeatsProj = options.getOrElse("nFeatsProj", "389").toInt
     // concatenate or add
     val concatenate = options.getOrElse("concatenate", "false").toBoolean
     // cross validation
@@ -96,15 +99,15 @@ object driver {
     // k for k-fold CV
     val kfold = options.getOrElse("kfold", "5").toInt
     // regularization parameter sequence start used in CV
-    val lambdaSeqFrom = options.getOrElse("lambdaSeqFrom", "0.1").toDouble
+    val lambdaSeqFrom = options.getOrElse("lambdaSeqFrom", "50").toDouble
     // regularization parameter sequence end used in CV
-    val lambdaSeqTo = options.getOrElse("lambdaSeqTo", "5").toDouble
+    val lambdaSeqTo = options.getOrElse("lambdaSeqTo", "100").toDouble
     // regularization parameter sequence step size used in CV
-    val lambdaSeqBy = options.getOrElse("lambdaSeqBy", ".1").toDouble
+    val lambdaSeqBy = options.getOrElse("lambdaSeqBy", "1").toDouble
     // create lambda sequence
     val lambdaSeq = lambdaSeqFrom to lambdaSeqTo by lambdaSeqBy
     // regularization parameter to be used if CVKind == "none"
-    val lambda = options.getOrElse("lambda", "4.4").toDouble
+    val lambda = options.getOrElse("lambda", "114").toDouble
 
     // print out inputs
     println("\nSpecify input and output options: ")
@@ -128,6 +131,10 @@ object driver {
     println("numIterations:              " + numIterations)
     println("checkDualityGap:            " + checkDualityGap)
     println("stoppingDualityGap:         " + stoppingDualityGap)
+    println("privateLOCO:                " + privateLOCO)
+    println("privateEps:                 " + privateEps)
+    println("privateDelta:               " + privateDelta)
+
 
     println("\nAlgorithm-specific inputs: ")
     println("projection:                 " + projection)
@@ -198,7 +205,7 @@ object driver {
           sc, classification, randomSeed, trainingPartitioned, responseTrain, nFeats,
           nPartitions, nExecutors, projection, useSparseStructure,
           concatenate, nFeatsProj, lambdaSeq, kfold,
-          numIterations, checkDualityGap, stoppingDualityGap)
+          numIterations, checkDualityGap, stoppingDualityGap, privateLOCO, privateEps, privateDelta)
       }else{
         lambda
       }
@@ -212,7 +219,7 @@ object driver {
         sc, classification, randomSeed, trainingPartitioned, responseTrain, nFeats,
         nPartitions, nExecutors, projection, useSparseStructure,
         concatenate, nFeatsProj, lambdaCV,
-        numIterations, checkDualityGap, stoppingDualityGap)
+        numIterations, checkDualityGap, stoppingDualityGap, privateLOCO, privateEps, privateDelta)
 
     // get second timestamp needed to time LOCO and compute time difference
     val endTime = System.currentTimeMillis
@@ -227,7 +234,8 @@ object driver {
       betaLoco, trainingPartitioned, test, responseTrain, responseTest, trainingDatafile, testDatafile,
       responsePathTrain, responsePathTest, nPartitions, nExecutors, nFeatsProj, projection,
       useSparseStructure, concatenate, lambda, CV, lambdaSeq, kfold, randomSeed, lambdaCV,
-      checkDualityGap, stoppingDualityGap, saveToHDFS, directoryNameResultsFolder)
+      checkDualityGap, stoppingDualityGap, privateLOCO, privateEps, privateDelta,
+      saveToHDFS, directoryNameResultsFolder)
 
     // compute end time of application and compute time needed overall
     val globalEndTime = System.currentTimeMillis

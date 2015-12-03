@@ -36,7 +36,10 @@ object ProjectionUtils {
                nObs : Int,
                nFeats : Int,
                seed : Int,
-               nPartitions : Int)
+               nPartitions : Int,
+               privateLOCO : Boolean,
+               privateEps : Double,
+               privateDelta : Double)
   : RDD[(Int, (List[Int], Matrix[Double], DenseMatrix[Double], Option[Matrix[Double]]))] = {
 
     val res = if(useSparseStructure){
@@ -46,7 +49,7 @@ object ProjectionUtils {
     }else{
       projectDense(
         localMats.asInstanceOf[RDD[(Int, (List[Int], DenseMatrix[Double], Option[DenseMatrix[Double]]))]],
-        projection, nFeatsProj, seed)
+        projection, nFeatsProj, privateLOCO, privateEps, privateDelta, nPartitions, seed)
     }
 
     res.asInstanceOf[RDD[(Int, (List[Int], Matrix[Double], DenseMatrix[Double], Option[Matrix[Double]]))]]
@@ -56,6 +59,10 @@ object ProjectionUtils {
                     localMats : RDD[(Int, (List[Int], DenseMatrix[Double], Option[DenseMatrix[Double]]))],
                     projection : String,
                     nFeatsProj : Int,
+                    privateLOCO : Boolean,
+                    privateEps : Double,
+                    privateDelta : Double,
+                    nPartitions : Int,
                     seed : Int)
   : RDD[(Int, (List[Int], DenseMatrix[Double], DenseMatrix[Double], Option[DenseMatrix[Double]]))] = {
 
@@ -70,11 +77,23 @@ object ProjectionUtils {
             "per partition (= number of features / number of partitions)")
       }
 
-      val RP = projection match{
+      val randomFeatures = projection match{
         case "SDCT" => SubsampledDCT(rawFeatsTrain, nFeatsProj, seed)
         case "sparse" => rawFeatsTrain * sparseProjMat(rawFeatsTrain.cols, nFeatsProj, seed)
         case _ => throw new IllegalArgumentException("Invalid argument for projection : " + projection)
       }
+
+      val RP =
+        if(privateLOCO){
+          val r = new scala.util.Random(seed)
+          val noiseSD =   (1/privateEps) * math.sqrt( ( 2 * (   math.log(1/(2*privateDelta))  +  privateEps )  )/nPartitions )
+          println("Adding Gaussian noise with standard deviation  " + noiseSD)
+          val noiseMatrix = DenseMatrix.tabulate(randomFeatures.rows, nFeatsProj){case (i, j) => noiseSD*r.nextGaussian()}
+          randomFeatures + noiseMatrix
+        }else{
+          randomFeatures
+        }
+
       (colIndices, rawFeatsTrain, RP, rawFeatsTest)
     }
   }

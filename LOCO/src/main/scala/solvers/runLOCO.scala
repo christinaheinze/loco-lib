@@ -61,10 +61,17 @@ object runLOCO {
       lambda : Double,
       numIterations : Int,
       checkDualityGap : Boolean,
-      stoppingDualityGap : Double) : (DenseVector[Double], Long, Long, Long) = {
+      stoppingDualityGap : Double,
+      privateLOCO : Boolean,
+      privateEps : Double,
+      privateDelta : Double) : (DenseVector[Double], Long, Long, Long) = {
 
     // get number of observations
     val nObs = response.size
+
+    //
+    val naive = if(nFeatsProj == 0) true else false
+
 
     println("\nNumber of observations: " + nObs)
     println("\nNumber of features: " + nFeats)
@@ -85,7 +92,8 @@ object runLOCO {
 
     // project local matrices
     val rawAndRandomFeats : RDD[(Int, (List[Int], Matrix[Double], DenseMatrix[Double], Option[Matrix[Double]]))] =
-      project(localMats, projection, useSparseStructure, nFeatsProj, nObs, nFeats, randomSeed, nPartitions)
+      project(localMats, projection, useSparseStructure, nFeatsProj, nObs, nFeats, randomSeed,
+        nPartitions, privateLOCO, privateEps, privateDelta)
 
     // force evaluation of rawAndRandomFeats RDD and unpersist localMats (only needed for timing purposes)
     rawAndRandomFeats.persist(StorageLevel.MEMORY_AND_DISK).foreach(x => {})
@@ -140,7 +148,7 @@ object runLOCO {
             localDual.runLocalDualConcatenate(
               oneLocalMat, randomProjectionsConcatenated.value, responseBroadcast.value, lambda,
               nObs, classification, numIterations, nFeatsProj, randomSeed, checkDualityGap,
-              stoppingDualityGap)
+              stoppingDualityGap, naive)
         }
       }else{
         // when RPs are to be added
@@ -148,7 +156,7 @@ object runLOCO {
               localDual.runLocalDualAdd(
                 oneLocalMat, randomProjectionsAdded.value, responseBroadcast.value, lambda, nObs,
                 classification, numIterations, nFeatsProj, randomSeed, checkDualityGap,
-                stoppingDualityGap)
+                stoppingDualityGap, naive)
         }
       }
     }.flatMap{case(colIndices, coefficients) => colIndices.zip(coefficients.toArray)}.collectAsMap()

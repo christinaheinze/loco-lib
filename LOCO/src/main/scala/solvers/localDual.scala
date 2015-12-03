@@ -44,7 +44,8 @@ object localDual {
       nFeatsProj : Int,
       randomSeed : Int,
       checkDualityGap : Boolean,
-      stoppingDualityGap : Double) : (List[Int], Vector[Double]) = {
+      stoppingDualityGap : Double,
+      naive : Boolean) : (List[Int], Vector[Double]) = {
 
     // subtract own random projection from sum of all random projections
     val randomMats = randomFeaturesSubtractLocal(rawAndRandomFeatsWithIndex._2._3, RPsAdded)
@@ -55,7 +56,7 @@ object localDual {
     // run local dual method on raw and random features
     runLocalDual(
       rawFeaturesWithIndices, randomMats, response, lambda, nObs, classification, numIterations,
-      randomSeed, checkDualityGap, stoppingDualityGap)
+      randomSeed, checkDualityGap, stoppingDualityGap, naive)
   }
 
 
@@ -70,7 +71,8 @@ object localDual {
       nFeatsProj : Int,
       randomSeed : Int,
       checkDualityGap : Boolean,
-      stoppingDualityGap : Double) : (List[Int], Vector[Double]) = {
+      stoppingDualityGap : Double,
+      naive : Boolean) : (List[Int], Vector[Double]) = {
 
     // concatenate all random projections, except the one from same worker
     val randomMats = randomFeaturesConcatenateOrAddAtWorker(rawFeatsWithIndex._1, RPsMap, true)
@@ -81,7 +83,7 @@ object localDual {
     // run local dual method on raw and random features
     runLocalDual(
       rawFeaturesWithIndices, randomMats, response, lambda, nObs, classification, numIterations,
-      randomSeed, checkDualityGap, stoppingDualityGap)
+      randomSeed, checkDualityGap, stoppingDualityGap, naive)
 
   }
 
@@ -96,13 +98,15 @@ object localDual {
       numIterations : Int,
       randomSeed : Int,
       checkDualityGap : Boolean,
-      stoppingDualityGap : Double) : (List[Int], Vector[Double]) = {
+      stoppingDualityGap : Double,
+      naive : Boolean) : (List[Int], Vector[Double]) = {
 
     // cast to dense matrix again
     val rawFeatures = matrixWithIndex._2.toDenseMatrix
 
     // create design matrix by concatenating raw and random features
-    val designMat = DenseMatrix.horzcat(rawFeatures, randomMats.toDenseMatrix)
+    val designMat = if(!naive) DenseMatrix.horzcat(rawFeatures, randomMats.toDenseMatrix) else rawFeatures
+
 
     // total number of features in local design matrix
     val numFeatures = designMat.cols
@@ -141,7 +145,8 @@ object localDual {
       nFeatsProj : Int,
       seed : Int,
       checkDualityGap : Boolean,
-      stoppingDualityGap : Double) : Array[(Double, DenseVector[Double])]  = {
+      stoppingDualityGap : Double,
+      naive : Boolean) : Array[(Double, DenseVector[Double])]  = {
 
     // subtract own random projection from sum of all random projections
     val randomMats = randomFeaturesSubtractLocal(matrixWithIndex._2._3, RPsAdded)
@@ -152,7 +157,7 @@ object localDual {
     // run local dual method on raw and random features for lambda sequence
     runLocalDual_lambdaSeq(
       rawFeaturesWithIndices, randomMats, response, lambdaSeq, nObs, classification, numIterations,
-      seed, checkDualityGap, stoppingDualityGap)
+      seed, checkDualityGap, stoppingDualityGap, naive)
   }
 
 
@@ -167,7 +172,8 @@ object localDual {
       nFeatsProj : Int,
       seed : Int,
       checkDualityGap : Boolean,
-      stoppingDualityGap : Double) : Array[(Double, DenseVector[Double])]  = {
+      stoppingDualityGap : Double,
+      naive : Boolean) : Array[(Double, DenseVector[Double])]  = {
 
     // concatenate all random projections, except the one from same worker
     val randomMats = randomFeaturesConcatenateOrAddAtWorker(matrixWithIndex._1, RPsMap, true)
@@ -178,7 +184,7 @@ object localDual {
     // run local dual method on raw and random features for lambda sequence
     runLocalDual_lambdaSeq(
       rawFeaturesWithIndices, randomMats, response, lambdaSeq, nObs, classification, numIterations,
-      seed, checkDualityGap, stoppingDualityGap)
+      seed, checkDualityGap, stoppingDualityGap, naive)
   }
 
 
@@ -192,13 +198,14 @@ object localDual {
       numIterations : Int,
       randomSeed : Int,
       checkDualityGap : Boolean,
-      stoppingDualityGap : Double) : Array[(Double, DenseVector[Double])] = {
+      stoppingDualityGap : Double,
+      naive : Boolean) : Array[(Double, DenseVector[Double])] = {
 
     // cast to dense matrix
     val rawFeatures = matrixWithIndex._2.toDenseMatrix
 
     // create design matrix by concatenating raw and random features
-    val designMat = DenseMatrix.horzcat(rawFeatures, randomMats)
+    val designMat = if(!naive) DenseMatrix.horzcat(rawFeatures, randomMats) else rawFeatures
 
     val numFeatures = designMat.cols
 
