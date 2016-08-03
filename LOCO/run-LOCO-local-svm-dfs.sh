@@ -6,7 +6,7 @@ $SPARK_HOME/bin/spark-submit \
 --driver-memory 1G \
 target/scala-2.10/LOCO-assembly-0.3.0.jar \
 --outdir="output" \
---saveToHDFS=false \
+--saveToHDFS=true \
 --readFromHDFS=true \
 --nPartitions=4 \
 --nExecutors=1 \
