@@ -1,7 +1,7 @@
 package LOCO
 
 
-import breeze.linalg.{unique, min, DenseVector}
+import breeze.linalg.{unique, DenseVector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.{RangePartitioner, SparkConf, SparkContext}
@@ -74,6 +74,7 @@ object driver {
 
     // specify whether classification or ridge regression shall be used
     val classification = options.getOrElse("classification", "true").toBoolean
+    // perform logistic regression --> local CV not supported
     val logistic = options.getOrElse("logistic", "false").toBoolean
     // number of iterations used in SDCA
     val numIterations = options.getOrElse("numIterations", "5000").toInt
@@ -101,7 +102,7 @@ object driver {
     // regularization parameter sequence start used in CV
     val lambdaSeqFrom = options.getOrElse("lambdaSeqFrom", "1").toDouble
     // regularization parameter sequence end used in CV
-    val lambdaSeqTo = options.getOrElse("lambdaSeqTo", "100").toDouble
+    val lambdaSeqTo = options.getOrElse("lambdaSeqTo", "10").toDouble
     // regularization parameter sequence step size used in CV
     val lambdaSeqBy = options.getOrElse("lambdaSeqBy", "1").toDouble
     // create lambda sequence
@@ -193,7 +194,6 @@ object driver {
           require(unique(DenseVector(partitionID.map(x => x._1.toDouble))).length == nPartitions)
 
           val trainingTemp = training.map(x => {
-//            print("\npID " + partitionID(x.index)._1 + " vID " + partitionID(x.index)._2 + " index " + x.index)
            require(partitionID(x.index)._2 == x.index)
             (partitionID(x.index)._1, x)
           })

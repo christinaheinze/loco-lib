@@ -2,7 +2,6 @@ package LOCO.solvers
 
 import breeze.linalg._
 import org.apache.spark.broadcast.Broadcast
-import scala.Predef
 import scala.collection._
 
 import org.apache.spark.storage.StorageLevel

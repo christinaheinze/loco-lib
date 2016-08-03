@@ -146,7 +146,7 @@ object localDual {
         println("Running local CV... ")
         CVUtils.crossValidationDualLocal(
           designMat, response, lambdaSeq, kfold, randomSeed, nObs, numIterations, numFeatures,
-          classification, checkDualityGap, stoppingDualityGap, numRawFeatures)
+          classification, logistic, checkDualityGap, stoppingDualityGap, numRawFeatures)
       }else{
         (lambdaProvided, null)
       }
@@ -182,8 +182,6 @@ object localDual {
       }else{
         None
       }
-
-//    print("\n Here : " + matrixWithIndex._1.length + " Max : " + max(matrixWithIndex._1) + " Min : " + min(matrixWithIndex._1) + " " + matrixWithIndex._1)
 
     // return column indices and coefficient vector
     (matrixWithIndex._1, beta_hat, localLambda, stats)

@@ -13,7 +13,6 @@ import preprocessingUtils.FeatureVectorLP
 import LOCO.solvers.{SDCA, localDual}
 import LOCO.utils.ProjectionUtils._
 
-import scala.collection.immutable.Iterable
 
 object CVUtils {
 
@@ -277,18 +276,9 @@ object CVUtils {
       }
     }
 
-    val lambdasWithLocalPreds = lambdasWithLocalPredictions
-//      if(privateLOCO){
-//        val r = new scala.util.Random()
-//        val noiseVector =  DenseVector.tabulate(trainingTestIndices._2.length){case (i) => 0.95*r.nextGaussian()}
-//        lambdasWithLocalPredictions.mapValues(predictions => predictions + noiseVector)
-//      }else{
-//        lambdasWithLocalPredictions
-//      }
-
     // get predicted values for each value of lambda
     val lambdasWithPredictions: RDD[(Double, DenseVector[Double])] =
-      lambdasWithLocalPreds.reduceByKey(_+_)
+      lambdasWithLocalPredictions.reduceByKey(_+_)
 
     // broadcast test response vector
     val responseTestBC = sc.broadcast(response(trainingTestIndices._2).toDenseVector)
@@ -330,10 +320,12 @@ object CVUtils {
                                 numIterations : Int,
                                 numFeatures : Int,
                                 classification : Boolean,
-//                                logistic : Boolean,
+                                logistic : Boolean,
                                 checkDualityGap : Boolean,
                                 stoppingDualityGap : Double,
                                 numRawFeatures : Int) : (Double, Option[Array[(Double, Double, Double)]]) = {
+
+    assert(!logistic, "Private (local) CV not supported for logistic regression")
 
     // set seed
     util.Random.setSeed(myseed)
@@ -386,10 +378,6 @@ object CVUtils {
           // compute performance
           val performance =
             if(classification){
-//
-//              if(logistic){
-//
-//              }else{
                 // compute predictions
                 val predictions : DenseVector[Double] =
                   test._2 :*
@@ -400,18 +388,14 @@ object CVUtils {
                   .toArray
                   .map(x => if(x > 0.0) 0.0 else 1.0)
                   .sum/test._2.length.toDouble
-//              }
 
             }
             else{
               // compute predictions
               val predictions : DenseVector[Double] =
                 (test._1 * new DenseMatrix(numFeatures, 1, beta_hat_k.toArray)).toDenseVector
-              //                (test._1(::,0 until numRawFeatures).toDenseMatrix * new DenseMatrix(numRawFeatures, 1, beta_hat_k(0 until numRawFeatures).toArray)).toDenseVector
 
               // compute MSE
-//              1/test._2.length.toDouble * math.pow(norm(test._2 - predictions), 2)
-
               math.pow(norm(test._2 - predictions), 2)/math.pow(norm(test._2 - breeze.stats.mean(test._2)), 2)
 
             }
@@ -429,16 +413,15 @@ object CVUtils {
         .mapValues(arrays => DenseVector(arrays))
 
     val lambda_with_mse: Map[Double, Double] =
-      lambda_with_errors.mapValues(elem => breeze.stats.mean(elem)) // sum(elem)/elem.length.toDouble)
+      lambda_with_errors.mapValues(elem => breeze.stats.mean(elem))
 
     val debug = true
 
     val lambda_with_mse_stats: Option[Array[(Double, Double, Double)]] =
       if(debug){
         val lambda_with_mse_sd = lambda_with_errors.map{ case(lambda : Double, elem : DenseVector[Double]) =>
-          val mean : Double =  breeze.stats.mean(elem) //sum(elem)/elem.length.toDouble
-//          val sumOfSq = breeze.stats.stddev(elem) // sum(elem.map(arrayElement => math.pow(arrayElement - mean, 2)))
-          val sd: Double =  breeze.stats.stddev(elem) // //1/(elem.length.toDouble - 1) * sumOfSq
+          val mean : Double =  breeze.stats.mean(elem)
+          val sd: Double =  breeze.stats.stddev(elem)
           (lambda, mean, sd)
         }.toArray
         Some(lambda_with_mse_sd)

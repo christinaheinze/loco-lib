@@ -2,7 +2,6 @@ package LOCO.solvers
 
 import breeze.linalg._
 import preprocessingUtils.utils.metrics._
-import preprocessingUtils.DataPoint
 
 
 object SDCA {
