@@ -2,6 +2,7 @@ package LOCO.solvers
 
 import breeze.linalg._
 import org.apache.spark.broadcast.Broadcast
+import scala.Predef
 import scala.collection._
 
 import org.apache.spark.storage.StorageLevel
@@ -48,6 +49,7 @@ object runLOCO {
   def run(
       sc : SparkContext,
       classification : Boolean,
+      logistic : Boolean,
       randomSeed : Int,
       trainingDataByCol : RDD[FeatureVectorLP],
       response : DenseVector[Double],
@@ -64,7 +66,13 @@ object runLOCO {
       stoppingDualityGap : Double,
       privateLOCO : Boolean,
       privateEps : Double,
-      privateDelta : Double) : (DenseVector[Double], Long, Long, Long) = {
+      privateDelta : Double,
+      privateCV : Boolean,
+      kfold : Int,
+      lambdaSeq : Seq[Double]) : (DenseVector[Double], Long, Long, Long,
+                                  Option[DenseVector[Double]],
+                                  Option[Array[Array[(Double, Double, Double)]]]) = {
+
 
     // get number of observations
     val nObs = response.size
@@ -134,7 +142,7 @@ object runLOCO {
     val responseBroadcast = sc.broadcast(response)
 
     // for each worker: compute estimates locally on design matrix with raw and random features
-    val betaLocoAsMap: Map[Int, Double] = {
+    val betaLocoAsMapwithLambdas =
       if (concatenate){
         // extract partitionID as key, and column indices and raw features as value
         val rawFeatsTrainRDD =
@@ -147,19 +155,51 @@ object runLOCO {
         rawFeatsTrainRDD.map{ oneLocalMat =>
             localDual.runLocalDualConcatenate(
               oneLocalMat, randomProjectionsConcatenated.value, responseBroadcast.value, lambda,
-              nObs, classification, numIterations, nFeatsProj, randomSeed, checkDualityGap,
-              stoppingDualityGap, naive)
+              nObs, classification, logistic, numIterations, nFeatsProj, randomSeed, checkDualityGap,
+              stoppingDualityGap, naive, privateCV, kfold, lambdaSeq)
         }
       }else{
         // when RPs are to be added
         rawAndRandomFeats.map{ oneLocalMat =>
               localDual.runLocalDualAdd(
                 oneLocalMat, randomProjectionsAdded.value, responseBroadcast.value, lambda, nObs,
-                classification, numIterations, nFeatsProj, randomSeed, checkDualityGap,
-                stoppingDualityGap, naive)
+                classification, logistic, numIterations, nFeatsProj, randomSeed, checkDualityGap,
+                stoppingDualityGap, naive, privateCV, kfold, lambdaSeq)
         }
       }
-    }.flatMap{case(colIndices, coefficients) => colIndices.zip(coefficients.toArray)}.collectAsMap()
+
+    betaLocoAsMapwithLambdas.persist()
+
+    val betaLocoAsMap: Map[Int, Double] =
+      betaLocoAsMapwithLambdas.flatMap{
+        case(colIndices, coefficients, _, _) =>
+          colIndices.zip(coefficients.toArray)
+      }.collectAsMap()
+
+    val localLambdas: Option[DenseVector[Double]] =
+      if(privateCV){
+        Some(
+          DenseVector(
+            betaLocoAsMapwithLambdas
+              .flatMap{ case(_, _, localLambda, _) => localLambda
+          }.collect()))
+      }else{
+        None
+      }
+
+    val debug = false
+    val privateCVStats =
+      if(debug & privateCV){
+        Some(
+           betaLocoAsMapwithLambdas.map(x => x._4.get).collect()
+        )
+      }else{
+        None
+      }
+
+
+
+    betaLocoAsMapwithLambdas.unpersist()
 
     // unpersist raw and random features
     rawAndRandomFeats.unpersist()
@@ -170,6 +210,6 @@ object runLOCO {
     }
 
     // sort coefficients by column index and return LOCO coefficients and time stamps
-    (betaLoco, t1, tRPComputed, tRPCommunicated)
+    (betaLoco, t1, tRPComputed, tRPCommunicated, localLambdas, privateCVStats)
   }
 }

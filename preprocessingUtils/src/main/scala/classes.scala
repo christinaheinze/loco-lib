@@ -17,3 +17,9 @@ object DataPoint{
 
 /** Case class FeatureVector for storing a feature vector with an index */
 case class FeatureVectorLP(index : Int, observations: org.apache.spark.mllib.linalg.Vector)
+
+object FeatureVectorLP{
+  implicit val idxOrdering = new Ordering[Int] {
+    override def compare(a: Int, b: Int) = a.compareTo(b)
+  }
+}

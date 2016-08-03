@@ -1,13 +1,13 @@
 name := "preprocessingUtils"
 
-version := "0.2"
+version := "0.3"
 
 scalaVersion := "2.10.4"
 
 // additional libraries
 libraryDependencies ++= Seq(
-  "org.apache.spark" %% "spark-core" % "1.5.1" % "provided",
-  "org.apache.spark"  %% "spark-mllib" % "1.5.1",
+  "org.apache.spark" %% "spark-core" % "2.0.0" % "provided",
+  "org.apache.spark"  %% "spark-mllib" % "2.0.0",
   "org.scalanlp" %% "breeze" % "0.11.2",
   "org.scalanlp" %% "breeze-natives" % "0.11.2",
   "com.github.fommil.netlib" % "all" % "1.1.2")
@@ -18,7 +18,7 @@ resolvers ++= Seq(
 )
 
 // Configure jar named used with the assembly plug-in
-assemblyJarName in assembly := "preprocess-assembly-0.2.jar"
+assemblyJarName in assembly := "preprocess-assembly-0.3.jar"
 
 // assembly merge strategy
 assemblyMergeStrategy in assembly := {

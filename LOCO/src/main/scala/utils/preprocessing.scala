@@ -1,5 +1,7 @@
 package LOCO.utils
 
+import org.apache.spark.mllib.linalg
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import breeze.linalg._
@@ -40,7 +42,13 @@ object preprocessing {
       val x = iter.next()
       columnIndices += x.index
       if(trainingAndTestIndices == null){
+//        val feature = DenseVector(x.observations.toArray)
+//        val featureMean = sum(feature)/nObs.toDouble
+//        val featureSD = math.pow(norm(feature - DenseVector.fill(nObs)(featureMean)),2)/(nObs.toDouble - 1)
+//        val centeredAndScaled = (feature - DenseVector.fill(nObs)(featureMean))/featureSD
+//        ArrayOfFeatureVecsTrain += centeredAndScaled.toArray
         ArrayOfFeatureVecsTrain += x.observations.toArray
+
       }else{
         val currentFeatureVector = DenseVector(x.observations.toArray)
         ArrayOfFeatureVecsTrain += currentFeatureVector(trainingAndTestIndices._1).toArray

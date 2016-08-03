@@ -112,6 +112,64 @@ object SDCA {
                 stoppingDualityGap : Double): Vector[Double] = {
 
     var alpha = Vector.fill(n)(0.0)
+    var w: DenseVector[Double] = DenseVector.fill(p)(0.0)
+    val r = new scala.util.Random(seed)
+
+    var it = 0
+
+    val checkCondition = (checkDualityGap : Boolean) => {
+      if(checkDualityGap)
+        if(
+          computeDualityGap(localData, response, n, w, alpha, lambda,
+            squaredLossPrimal, squaredLossDual) > stoppingDualityGap
+        )
+          true
+        else
+          false
+      else
+        true
+    }
+
+    // perform local updates
+    for (i <- 1 to nIterations if checkCondition(checkDualityGap)){
+      it = i
+
+      // randomly select a local example
+      val idx = r.nextInt(n)
+      val y = response(idx)
+      val x: DenseVector[Double] = localData(idx, ::).t
+
+      // delta alpha
+      val deltaAlpha = (y - (x dot w) - 0.5*alpha(idx))/(0.5 + (x dot x)/(lambda*n))
+
+      // update primal and dual variables
+      w = w + x * deltaAlpha/(lambda*n)
+      alpha(idx) = alpha(idx) + deltaAlpha
+
+    }
+
+    if(checkDualityGap)
+      println("Duality gap: " +
+        computeDualityGap(localData, response, n, w, alpha, lambda,
+          squaredLossPrimal, squaredLossDual)
+        + " reached in iteration " + it)
+
+    // return alpha
+    alpha
+  }
+
+
+  def localSDCALogistic(localData: DenseMatrix[Double],
+                         response : Vector[Double],
+                         nIterations: Int,
+                         lambda: Double,
+                         n: Int,
+                         p : Int,
+                         seed: Int,
+                         checkDualityGap : Boolean,
+                         stoppingDualityGap : Double): Vector[Double] = {
+
+    var alpha = Vector.fill(n)(0.0)
     var w = Vector.fill(p)(0.0)
     val r = new scala.util.Random(seed)
 
@@ -140,7 +198,7 @@ object SDCA {
       val x = localData(idx, ::).t
 
       // delta alpha
-      val deltaAlpha = (y - (x dot w) - 0.5*alpha(idx))/(0.5 + (x dot x)/(lambda*n))
+      val deltaAlpha = (y/(1 + math.exp(y * (x dot w))) - alpha(idx))/math.max(1, 0.25 + (x dot x)/(lambda*n))
 
       // update primal and dual variables
       w = w + x * deltaAlpha/(lambda*n)

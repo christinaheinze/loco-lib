@@ -26,7 +26,9 @@ object main {
     // parse and read in inputs
 
     // output directory
-    val outdir = options.getOrElse("outdir","")
+    val outdir = options.getOrElse("outdir","output")
+    // specify whether output shall be saved on HDFS
+    val saveToHDFS = options.getOrElse("saveToHDFS", "false").toBoolean
     // how many partitions of the data matrix to use
     val nPartitions = options.getOrElse("nPartitions","4").toInt
     // "text" or "object"
@@ -49,19 +51,26 @@ object main {
     val proportionTest = options.getOrElse("proportionTest", "0.2").toDouble
     // random seed
     val myseed = options.getOrElse("seed", "3").toInt
-    // get timestamp as identifier of output files
-    val timestamp = System.currentTimeMillis.toString
+
     // file name for training file output
-    val outputTrainFileName =
-      options.getOrElse("outputTrainFileName", "output/dogs_vs_cats_small_train")
+    var outputTrainFileName =
+      options.getOrElse("outputTrainFileName", "dogs_vs_cats_small_train")
+    outputTrainFileName = outdir + "/" + outputTrainFileName
+
     // file name for test file output
-    val outputTestFileName = options.getOrElse("outputTestFileName", "output/dogs_vs_cats_small_test")
-    // specify class of output: DataPoint, LabeledPoint or DoubleArray
-    val outputClass = options.getOrElse("outputClass", "LabeledPoint")
+    var outputTestFileName = options.getOrElse("outputTestFileName", "dogs_vs_cats_small_test")
+    outputTestFileName = outdir + "/" + outputTestFileName
+
     // if two different output formats are desired, set to true
     val twoOutputClasses = options.getOrElse("twoOutputClasses", "false").toBoolean
-    // specify second output format
+    // specify class of output: DataPoint, LabeledPoint or DoubleArray
     val secondOutputClass = options.getOrElse("secondOutputClass", "LabeledPoint")
+
+    // if two different output formats are desired, set to true
+    val threeOutputClasses = options.getOrElse("threeOutputClasses", "false").toBoolean
+    // specify second output format
+    val thirdOutputClass = options.getOrElse("thirdOutputClass", "LabeledPoint")
+
     // center the features to have mean zero
     val centerFeatures = options.getOrElse("centerFeatures", "true").toBoolean
     // center the response to have mean zero
@@ -97,8 +106,7 @@ object main {
     println("scaleFeatures:           " + scaleFeatures)
 
     // create folder for output
-    val DirectoryName: String = outdir + "output"
-    val dir: java.io.File = new java.io.File(DirectoryName)
+    val dir: java.io.File = new java.io.File(outdir)
     if(!dir.exists()){
       dir.mkdir()
     }
@@ -149,17 +157,23 @@ object main {
           testDataNotCenteredLabeledPoint, centerFeatures, centerResponse,
           scaleFeatures, scaleResponse)
 
-    // cast in desired format as specified in "outputClass" and save
-    save.castAndSave(
-      trainingDataCentered, testDataCentered, outputClass, outputTrainFileName + "-rowwise", outputTestFileName + "-rowwise")
 
-    // if two different output formats are desired, cast in desired format as specified
-    // in "secondOutputClass" and save
-    if(twoOutputClasses){
+
+    if(twoOutputClasses && secondOutputClass != "text")
+      // cast in desired format as specified in "secondOutputClass" and save
       save.castAndSave(
-        trainingDataCentered, testDataCentered, secondOutputClass, outputTrainFileName,
+        trainingDataCentered, testDataCentered, secondOutputClass, outputTrainFileName + "-rowwise",
+        outputTestFileName + "-rowwise")
+
+
+    // if three different output formats are desired, cast in desired format as specified
+    // in "thirdOutputClass" and save
+    if(threeOutputClasses && thirdOutputClass != "text"){
+      save.castAndSave(
+        trainingDataCentered, testDataCentered, thirdOutputClass, outputTrainFileName,
         outputTestFileName)
     }
+
 
     // distribute training data over columns
     val (trainingDataCenteredOverCols, responseTrain, nFeatsTrain) =
@@ -182,16 +196,29 @@ object main {
     save.saveAsObjectFile(testDataCenteredOverCols, outputTestFileName + "-colwise")
 
     // save response vectors
-    scala.tools.nsc.io.File(outputTrainFileName + "-responseTrain.txt")
-      .writeAll(responseTrain.toArray.mkString(" "))
+    if(saveToHDFS)
+      sc.parallelize(List(responseTrain.toArray.mkString(" ")), 1)
+        .saveAsTextFile(outputTrainFileName + "-responseTrain")
+    else
+      scala.tools.nsc.io.File(outputTrainFileName + "-responseTrain.txt")
+        .writeAll(responseTrain.toArray.mkString(" "))
 
-    scala.tools.nsc.io.File(outputTestFileName + "-responseTest.txt")
-      .writeAll(responseTest.toArray.mkString(" "))
+    if(saveToHDFS)
+      sc.parallelize(List(responseTest.toArray.mkString(" ")), 1)
+        .saveAsTextFile(outputTestFileName + "-responseTest")
+    else
+      scala.tools.nsc.io.File(outputTestFileName + "-responseTest.txt")
+        .writeAll(responseTest.toArray.mkString(" "))
+
 
     // save number of feature vectors
     val nFeats = max(nFeatsTrain, nFeatsTest)
-    scala.tools.nsc.io.File(outputTrainFileName + "-nFeats.txt")
-      .writeAll(nFeats.toString)
+    if(saveToHDFS)
+      sc.parallelize(List(nFeats.toString), 1)
+        .saveAsTextFile(outputTrainFileName + "-nFeats")
+    else
+      scala.tools.nsc.io.File(outputTrainFileName + "-nFeats.txt")
+        .writeAll(nFeats.toString)
 
     println("Application finished running successfully!")
   }

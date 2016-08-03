@@ -97,6 +97,15 @@ object load {
     Vectors.dense(responseString)
   }
 
+  /*
+  Read response vector after saving with '.toArray.mkString(" ")'
+   */
+  def readPartitionsFile(partitionsPath: String)  = {
+    // load data
+    Source.fromFile(partitionsPath).getLines().flatMap(x => x.split(" ")).map(_.toInt).toArray.zipWithIndex
+
+  }
+
 
   /**
    * If the provided data file(s) is/are object files

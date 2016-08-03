@@ -1,10 +1,13 @@
 package LOCO.solvers
 
+import LOCO.utils.CVUtils
 import breeze.linalg.{Vector, DenseMatrix, DenseVector}
 import breeze.linalg._
 
 import LOCO.utils.ProjectionUtils._
-import LOCO.solvers.SDCA.{localSDCA, localSDCARidge}
+import LOCO.solvers.SDCA.{localSDCA, localSDCARidge, localSDCALogistic}
+
+import scala.collection.Seq
 
 
 object localDual {
@@ -40,23 +43,33 @@ object localDual {
       lambda : Double,
       nObs : Int,
       classification : Boolean,
+      logistic : Boolean,
       numIterations : Int,
       nFeatsProj : Int,
       randomSeed : Int,
       checkDualityGap : Boolean,
       stoppingDualityGap : Double,
-      naive : Boolean) : (List[Int], Vector[Double]) = {
+      naive : Boolean,
+      privateCV : Boolean,
+      kfold : Int,
+      lambdaSeq : Seq[Double]) : (List[Int], Vector[Double], Option[Double], Option[Array[(Double, Double, Double)]]) = {
+
+    println("Adding random features at worker " + rawAndRandomFeatsWithIndex._1 + "...")
 
     // subtract own random projection from sum of all random projections
-    val randomMats = randomFeaturesSubtractLocal(rawAndRandomFeatsWithIndex._2._3, RPsAdded)
+    val randomMats =
+      if(!naive)
+        randomFeaturesSubtractLocal(rawAndRandomFeatsWithIndex._2._3, RPsAdded)
+      else
+        null
 
     // extract indices of raw feature vectors and corresponding feature vectors
     val rawFeaturesWithIndices = (rawAndRandomFeatsWithIndex._2._1, rawAndRandomFeatsWithIndex._2._2)
 
     // run local dual method on raw and random features
     runLocalDual(
-      rawFeaturesWithIndices, randomMats, response, lambda, nObs, classification, numIterations,
-      randomSeed, checkDualityGap, stoppingDualityGap, naive)
+      rawFeaturesWithIndices, randomMats, response, lambda, nObs, classification, logistic, numIterations,
+      randomSeed, checkDualityGap, stoppingDualityGap, naive, privateCV, kfold, lambdaSeq)
   }
 
 
@@ -67,23 +80,33 @@ object localDual {
       lambda : Double,
       nObs : Int,
       classification : Boolean,
+      logistic : Boolean,
       numIterations : Int,
       nFeatsProj : Int,
       randomSeed : Int,
       checkDualityGap : Boolean,
       stoppingDualityGap : Double,
-      naive : Boolean) : (List[Int], Vector[Double]) = {
+      naive : Boolean,
+      privateCV : Boolean,
+      kfold : Int,
+      lambdaSeq : Seq[Double]) : (List[Int], Vector[Double], Option[Double], Option[Array[(Double, Double, Double)]]) = {
+
+    println("Concatenating random features at worker " + rawFeatsWithIndex._1 + "...")
 
     // concatenate all random projections, except the one from same worker
-    val randomMats = randomFeaturesConcatenateOrAddAtWorker(rawFeatsWithIndex._1, RPsMap, true)
+    val randomMats =
+      if(!naive)
+        randomFeaturesConcatenateOrAddAtWorker(rawFeatsWithIndex._1, RPsMap, true)
+      else
+        null
 
     // extract indices of raw feature vectors and corresponding feature vectors
     val rawFeaturesWithIndices = (rawFeatsWithIndex._2._1, rawFeatsWithIndex._2._2)
 
     // run local dual method on raw and random features
     runLocalDual(
-      rawFeaturesWithIndices, randomMats, response, lambda, nObs, classification, numIterations,
-      randomSeed, checkDualityGap, stoppingDualityGap, naive)
+      rawFeaturesWithIndices, randomMats, response, lambda, nObs, classification, logistic, numIterations,
+      randomSeed, checkDualityGap, stoppingDualityGap, naive, privateCV, kfold, lambdaSeq)
 
   }
 
@@ -92,31 +115,56 @@ object localDual {
       matrixWithIndex: (List[Int], Matrix[Double]),
       randomMats : Matrix[Double],
       response : Vector[Double],
-      lambda : Double,
+      lambdaProvided : Double,
       nObs : Int,
       classification : Boolean,
+      logistic : Boolean,
       numIterations : Int,
       randomSeed : Int,
       checkDualityGap : Boolean,
       stoppingDualityGap : Double,
-      naive : Boolean) : (List[Int], Vector[Double]) = {
+      naive : Boolean,
+      privateCV : Boolean,
+      kfold : Int,
+      lambdaSeq : Seq[Double]) : (List[Int], Vector[Double], Option[Double], Option[Array[(Double, Double, Double)]]) = {
 
     // cast to dense matrix again
     val rawFeatures = matrixWithIndex._2.toDenseMatrix
 
     // create design matrix by concatenating raw and random features
-    val designMat = if(!naive) DenseMatrix.horzcat(rawFeatures, randomMats.toDenseMatrix) else rawFeatures
+    val designMatUnscaled = if(!naive) DenseMatrix.horzcat(rawFeatures, randomMats.toDenseMatrix) else rawFeatures
 
+    val designMat = breeze.linalg.scale(designMatUnscaled, center = false, scale = false)
 
     // total number of features in local design matrix
     val numFeatures = designMat.cols
+    val numRawFeatures = rawFeatures.cols
+
+    // find best lambda if local CV has been chosen, otherwise use provided lambda
+    val (lambda, stats) : (Double, Option[Array[(Double, Double, Double)]])  =
+      if(privateCV){
+        println("Running local CV... ")
+        CVUtils.crossValidationDualLocal(
+          designMat, response, lambdaSeq, kfold, randomSeed, nObs, numIterations, numFeatures,
+          classification, checkDualityGap, stoppingDualityGap, numRawFeatures)
+      }else{
+        (lambdaProvided, null)
+      }
+
 
     // train on full training set with min_lambda to find dual variables alpha
     val alpha: Vector[Double] =
         if(classification) {
-          localSDCA(
-            designMat, response, numIterations, lambda, nObs, numFeatures, randomSeed,
-            checkDualityGap, stoppingDualityGap)
+          if(logistic){
+            localSDCALogistic(
+              designMat, response, numIterations, lambda, nObs, numFeatures, randomSeed,
+              checkDualityGap, stoppingDualityGap)
+          }else{
+            localSDCA(
+              designMat, response, numIterations, lambda, nObs, numFeatures, randomSeed,
+              checkDualityGap, stoppingDualityGap)
+          }
+
         }else{
           localSDCARidge(
             designMat, response, numIterations, lambda, nObs, numFeatures, randomSeed,
@@ -128,8 +176,17 @@ object localDual {
     val scaling = 1.0/(nObs*lambda)
     val beta_hat = primalVariables.toDenseVector * scaling
 
+    val localLambda =
+      if(privateCV){
+        Some(lambda)
+      }else{
+        None
+      }
+
+//    print("\n Here : " + matrixWithIndex._1.length + " Max : " + max(matrixWithIndex._1) + " Min : " + min(matrixWithIndex._1) + " " + matrixWithIndex._1)
+
     // return column indices and coefficient vector
-    (matrixWithIndex._1, beta_hat)
+    (matrixWithIndex._1, beta_hat, localLambda, stats)
   }
 
 
@@ -141,6 +198,7 @@ object localDual {
       lambdaSeq : Seq[Double],
       nObs : Int,
       classification : Boolean,
+      logistic : Boolean,
       numIterations : Int,
       nFeatsProj : Int,
       seed : Int,
@@ -156,7 +214,7 @@ object localDual {
 
     // run local dual method on raw and random features for lambda sequence
     runLocalDual_lambdaSeq(
-      rawFeaturesWithIndices, randomMats, response, lambdaSeq, nObs, classification, numIterations,
+      rawFeaturesWithIndices, randomMats, response, lambdaSeq, nObs, classification, logistic, numIterations,
       seed, checkDualityGap, stoppingDualityGap, naive)
   }
 
@@ -168,6 +226,7 @@ object localDual {
       lambdaSeq : Seq[Double],
       nObs : Int,
       classification : Boolean,
+      logistic : Boolean,
       numIterations : Int,
       nFeatsProj : Int,
       seed : Int,
@@ -176,14 +235,18 @@ object localDual {
       naive : Boolean) : Array[(Double, DenseVector[Double])]  = {
 
     // concatenate all random projections, except the one from same worker
-    val randomMats = randomFeaturesConcatenateOrAddAtWorker(matrixWithIndex._1, RPsMap, true)
+    val randomMats =
+      if(!naive)
+        randomFeaturesConcatenateOrAddAtWorker(matrixWithIndex._1, RPsMap, true)
+      else
+        null
 
     // extract indices of raw feature vectors and corresponding feature vectors
     val rawFeaturesWithIndices = (matrixWithIndex._2._1, matrixWithIndex._2._2, matrixWithIndex._2._3)
 
     // run local dual method on raw and random features for lambda sequence
     runLocalDual_lambdaSeq(
-      rawFeaturesWithIndices, randomMats, response, lambdaSeq, nObs, classification, numIterations,
+      rawFeaturesWithIndices, randomMats, response, lambdaSeq, nObs, classification, logistic, numIterations,
       seed, checkDualityGap, stoppingDualityGap, naive)
   }
 
@@ -195,6 +258,7 @@ object localDual {
       lambdaSeq : Seq[Double],
       nObs : Int,
       classification : Boolean,
+      logistic : Boolean,
       numIterations : Int,
       randomSeed : Int,
       checkDualityGap : Boolean,
@@ -213,9 +277,16 @@ object localDual {
       // train
       val alpha =
           if(classification){
-            localSDCA(
-              designMat, response, numIterations, currentLambda, nObs, numFeatures,
-              randomSeed, checkDualityGap, stoppingDualityGap)
+            if(logistic){
+              localSDCALogistic(
+                designMat, response, numIterations, currentLambda, nObs, numFeatures,
+                randomSeed, checkDualityGap, stoppingDualityGap)
+            }else{
+              localSDCA(
+                designMat, response, numIterations, currentLambda, nObs, numFeatures,
+                randomSeed, checkDualityGap, stoppingDualityGap)
+            }
+
           }else{
             localSDCARidge(
               designMat, response, numIterations, currentLambda, nObs, numFeatures,

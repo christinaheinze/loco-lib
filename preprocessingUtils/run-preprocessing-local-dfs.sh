@@ -4,8 +4,8 @@ $SPARK_HOME/bin/spark-submit \
 --class "preprocessingUtils.main" \
 --master local[4] \
 target/scala-2.10/preprocess-assembly-0.3.jar \
---outdir="../data/dogs_vs_cats/" \
---saveToHDFS=false \
+--outdir="../data/dogs_vs_cats2/" \
+--saveToHDFS=true \
 --nPartitions=4 \
 --dataFormat=text \
 --sparse=false \

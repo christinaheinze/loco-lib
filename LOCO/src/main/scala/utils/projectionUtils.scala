@@ -1,7 +1,7 @@
 package LOCO.utils
 
 import scala.collection.mutable.ArrayBuffer
-import breeze.linalg.{Matrix, CSCMatrix, DenseMatrix, DenseVector}
+import breeze.linalg._
 import edu.emory.mathcs.jtransforms.dct._
 
 import org.apache.spark.rdd.RDD
@@ -67,7 +67,7 @@ object ProjectionUtils {
   : RDD[(Int, (List[Int], DenseMatrix[Double], DenseMatrix[Double], Option[DenseMatrix[Double]]))] = {
 
     // compute random projections and return resulting RDD
-    localMats.mapValues{case(colIndices, rawFeatsTrain, rawFeatsTest) =>
+    localMats.mapValues{  case(colIndices, rawFeatsTrain, rawFeatsTest) =>
 
       // check whether projection dimension has been chosen smaller
       // than number of raw features per worker
@@ -85,11 +85,15 @@ object ProjectionUtils {
 
       val RP =
         if(privateLOCO){
+          val minMaxPerCol: DenseVector[(Double, Double)] =  breeze.linalg.minMax(rawFeatsTrain.t(*, ::))
+          val range = max(minMaxPerCol.map(x => x._2 - x._1))
+          println("range: " + range)
           val r = new scala.util.Random(seed)
-          val noiseSD =   (1/privateEps) * math.sqrt( ( 2 * (   math.log(1/(2*privateDelta))  +  privateEps )  )/nPartitions )
+          val noiseSD =   (range/privateEps) * math.sqrt( ( 2 * (   math.log(1/(2*privateDelta))  +  privateEps )  )/1 )
           println("Adding Gaussian noise with standard deviation  " + noiseSD)
           val noiseMatrix = DenseMatrix.tabulate(randomFeatures.rows, nFeatsProj){case (i, j) => noiseSD*r.nextGaussian()}
-          randomFeatures + noiseMatrix
+          val DPrandomFeatures = randomFeatures + noiseMatrix
+          breeze.linalg.scale(DPrandomFeatures, center = false, scale = false)
         }else{
           randomFeatures
         }
@@ -287,11 +291,19 @@ object ProjectionUtils {
     // number of features
     val dim = dataMat.cols
 
+
+    val nProjDimCorrected =
+      if(dim < nProjDim){
+        dim
+      }else{
+        nProjDim
+      }
+
     // buffer for transformed vectors
     var ArrayOfFeatureVecs = new ArrayBuffer[Array[Double]]()
 
     // compute scaling factor
-    val srhtConst = math.sqrt(dim / nProjDim.toDouble)
+    val srhtConst = math.sqrt(dim / nProjDimCorrected.toDouble)
 
     // sample from Rademacher distribution and compute diagonal
     val dist = Map(-1.0 -> 1.toDouble/2, 1.0 -> 1.toDouble/2)
@@ -308,7 +320,7 @@ object ProjectionUtils {
     val res = new DenseMatrix(dim, n, ArrayOfFeatureVecs.toArray.flatten).t
 
     // subsample
-    val subsampledIndices = util.Random.shuffle(List.fill(1)(0 until dim).flatten).take(nProjDim)
+    val subsampledIndices = util.Random.shuffle(List.fill(1)(0 until dim).flatten).take(nProjDimCorrected)
 
     res(::, subsampledIndices).toDenseMatrix
   }

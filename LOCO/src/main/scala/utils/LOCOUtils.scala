@@ -1,6 +1,8 @@
 package LOCO.utils
 
 import breeze.linalg._
+import breeze.stats.mean
+import breeze.numerics.abs
 import scala.collection.mutable
 
 import org.apache.spark.SparkContext
@@ -31,9 +33,31 @@ object LOCOUtils {
           localPrediction((workerID, (indicesList, localRawFeatureMatrix)), betas.value)
       }.reduce(_ + _)
 
-      sum((response :* predictions).map(x => if(x > 0.0) 0.0 else 1.0))/response.length.toDouble
+    val responseTimesPredictions: DenseVector[Double] = response :* predictions
+    mean(responseTimesPredictions.map(x => if(x > 0.0) 0.0 else 1.0))
   }
 
+  def computeClassificationErrorLogistic_overCols(sc : SparkContext,
+                                                  coefficientVector : DenseVector[Double],
+                                                  localMatsRDD: RDD[(Int, (List[Int], Matrix[Double], Option[Matrix[Double]]))],
+                                                  response : DenseVector[Double]
+                                                   ) = {
+
+    // broadcast coefficients
+    val betas = sc.broadcast(coefficientVector)
+
+    // compute predictions
+    val predictions : DenseVector[Double] =
+      localMatsRDD.map{
+        case(workerID, (indicesList, localRawFeatureMatrix, localRawFeatureTestMatrix)) =>
+          localPrediction((workerID, (indicesList, localRawFeatureMatrix)), betas.value)
+      }.reduce(_ + _)
+
+    val probabilities = predictions.map(x => 1/(1+math.exp(-x)))
+    print("\nProbs:" + probabilities + "\n")
+    val mappedToOutcome: DenseVector[Double] = probabilities.map(x => if(x > 0.5) 1.0 else -1.0)
+    0.5*sum(abs(mappedToOutcome - response))/predictions.length.toDouble
+  }
 
   /**
    *  Computes the mean squared error, when the data is distributed over columns
@@ -55,7 +79,7 @@ object LOCOUtils {
           localPrediction((workerID, (indicesList, localRawFeatureMatrix)), betas.value)
       }.reduce(_ + _)
 
-      math.pow(norm(response - predictions), 2)
+      math.pow(norm(response - predictions), 2)/predictions.length.toDouble
   }
 
   /**
@@ -66,8 +90,7 @@ object LOCOUtils {
                       sc : SparkContext,
                       coefficientVector : DenseVector[Double],
                       localMatsRDD: RDD[(Int, (List[Int], Matrix[Double], Option[Matrix[Double]]))],
-                      response : DenseVector[Double]//,
-                      ) = {
+                      response : DenseVector[Double]) : (Double, Double) = {
 
     // broadcast coefficients
     val betas = sc.broadcast(coefficientVector)
@@ -84,7 +107,7 @@ object LOCOUtils {
     val meanResponse = sum(response)/response.length.toDouble
     val denom : Double = math.pow(norm(response - meanResponse), 2)
 
-    num/denom
+    (num/denom, num/response.length.toDouble)
   }
 
   def localPrediction(
@@ -103,6 +126,7 @@ object LOCOUtils {
   def printSummaryStatistics(
      sc : SparkContext,
      classification : Boolean,
+     logistic : Boolean,
      numIterations : Int,
      timeStampStart : Long,
      timeDifference : Long,
@@ -134,10 +158,15 @@ object LOCOUtils {
      checkDualityGap : Boolean,
      stoppingDualityGap : Double,
      privateLOCO : Boolean,
+     privateCV : Boolean,
      privateEps : Double,
      privateDelta : Double,
      saveToHDFS : Boolean,
-     directoryName : String) : Unit = {
+     directoryName : String,
+     localLambdas : Option[DenseVector[Double]],
+     privateCVStats : Option[Array[Array[(Double, Double, Double)]]],
+     globalCVStats : Option[Array[(Double, Double, Double)]],
+     debug : Boolean) : Unit = {
 
 
     // print estimates
@@ -147,12 +176,24 @@ object LOCOUtils {
 
     val MSE_train =
       if(classification){
-        computeClassificationError_overCols(
-          sc,
-          betaLoco,
-          createLocalMatrices(trainingData, useSparseStructure, responseTrain.length, null),
-          responseTrain
-        )
+        val misClassError =
+          if(logistic){
+            computeClassificationErrorLogistic_overCols(
+              sc,
+              betaLoco,
+              createLocalMatrices(trainingData, useSparseStructure, responseTrain.length, null),
+              responseTrain
+            )
+          }else{
+            computeClassificationError_overCols(
+              sc,
+              betaLoco,
+              createLocalMatrices(trainingData, useSparseStructure, responseTrain.length, null),
+              responseTrain
+            )
+          }
+
+        (misClassError, misClassError)
       }else{
         compute_standardizedMSE_overCols(
           sc,
@@ -163,19 +204,33 @@ object LOCOUtils {
       }
 
     if (classification)
-      println("Misclassification error on training set = " + MSE_train)
-    else
-      println("Training Mean Squared Error = " + MSE_train)
+      println("Misclassification error on training set = " + MSE_train._1)
+    else{
+      println("Training Mean Squared Error = " + MSE_train._1)
+      println("Training Mean Squared Error (unstandardized) = " + MSE_train._2)
+    }
 
 
     val MSE_test =
       if(classification){
-        computeClassificationError_overCols(
-          sc,
-          betaLoco,
-          createLocalMatrices(testData, useSparseStructure, responseTest.length, null),
-          responseTest
-        )
+        val misClassTest =
+        if(logistic){
+          computeClassificationErrorLogistic_overCols(
+            sc,
+            betaLoco,
+            createLocalMatrices(testData, useSparseStructure, responseTest.length, null),
+            responseTest
+          )
+        }else{
+          computeClassificationError_overCols(
+            sc,
+            betaLoco,
+            createLocalMatrices(testData, useSparseStructure, responseTest.length, null),
+            responseTest
+          )
+        }
+
+        (misClassTest, misClassTest)
       }else{
         compute_standardizedMSE_overCols(
           sc,
@@ -186,18 +241,20 @@ object LOCOUtils {
       }
 
     if(classification)
-      println("Misclassification error on test set = " + MSE_test)
-    else
-      println("Test Mean Squared Error = " + MSE_test)
+      println("Misclassification error on test set = " + MSE_test._1)
+    else{
+      println("Test Mean Squared Error = " + MSE_test._1)
+      println("Test Mean Squared Error (unstandardized) = " + MSE_test._2)
+    }
 
 
     // save test MSE to file
     if(saveToHDFS)
-      sc.parallelize(List(MSE_test.toString()), 1)
+      sc.parallelize(List(MSE_test._1.toString()), 1)
         .saveAsTextFile(directoryName + "/test_MSE_" + timeStampStart)
     else
       scala.tools.nsc.io.File(directoryName + "/test_MSE_" + timeStampStart +  ".txt")
-        .writeAll(MSE_test.toString)
+        .writeAll(MSE_test._1.toString)
 
     // save beta to file
     if(saveToHDFS)
@@ -219,8 +276,12 @@ object LOCOUtils {
     // save configurations
     val build = new mutable.StringBuilder()
 
-    build.append("\nTraining MSE :           " + MSE_train)
-    build.append("\nTest MSE:                " + MSE_test)
+    build.append("\nTraining MSE :           " + MSE_train._1)
+    build.append(if(!classification)
+                 "\nTraining MSE (unstd.) :  " + MSE_train._2)
+    build.append("\nTest MSE:                " + MSE_test._1)
+    build.append(if(!classification)
+                 "\nTest MSE  (unstd.) :     " + MSE_test._2)
     build.append("\nclassification:          " + classification)
     build.append("\nprivateLOCO:             " + privateLOCO)
     build.append("\nprivateEps:              " + privateEps)
@@ -240,6 +301,7 @@ object LOCOUtils {
     build.append("\nnFeatsProj:              " + nFeatsProj)
     build.append("\nconcatenate:             " + concatenate)
     build.append("\nCV:                      " + CV)
+    build.append("\nprivateCV                " + privateCV)
     build.append(if(CV)
                  "\nlambdaGlobal:            " + lambdaGlobal)
     build.append("\nRun time LOCO:           " + timeDifference)
@@ -247,11 +309,13 @@ object LOCOUtils {
     build.append("\nCommunication time LOCO: " + communicationTime)
     build.append("\nRest time LOCO:          " + restTime)
     build.append("\nCV time LOCO:            " + CVTime)
-    build.append(if(!CV)
+    build.append(if(!CV & !privateCV)
                  "\nlambda (provided):       " + lambda
                  else{
                  "\nkfold:                   " + kFold +
                  "\nlambdaSeq:               " + lambdaSeq})
+    build.append(if(privateCV)
+                 "\nlocalLambdas:              " + localLambdas.get)
 
     if(saveToHDFS)
       sc.parallelize(List(build.toString()), 1)
@@ -260,7 +324,22 @@ object LOCOUtils {
       scala.tools.nsc.io.File(directoryName + "/providedOptions_" + timeStampStart + ".txt")
         .writeAll(build.toString())
 
+    if(debug){
+
+      if(privateCV){
+        val privateStats: Array[Array[(Double, Double, Double)]] = privateCVStats.get
+        for(e <- 0 until privateStats.length){
+          val workerE: Array[(Double, Double, Double)] = privateStats(e)
+          scala.tools.nsc.io.File(directoryName + "/privateCVStats_" + e + "_" + timeStampStart + ".txt")
+            .writeAll(DenseVector(workerE).toString)
+        }
+      }else if(CV){
+        val globalStats: Array[(Double, Double, Double)] = globalCVStats.get
+          scala.tools.nsc.io.File(directoryName + "/globalCVStats_" + timeStampStart + ".txt")
+            .writeAll(DenseVector(globalStats).toString)
+      }
+
+    }
+
   }
-
-
 }

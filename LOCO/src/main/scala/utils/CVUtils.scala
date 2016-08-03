@@ -1,6 +1,7 @@
 package LOCO.utils
 
 import breeze.linalg._
+import breeze.numerics._
 import scala.collection.Seq
 
 import org.apache.spark.storage.StorageLevel
@@ -9,8 +10,10 @@ import org.apache.spark.rdd.RDD
 
 import preprocessingUtils.FeatureVectorLP
 
-import LOCO.solvers.localDual
+import LOCO.solvers.{SDCA, localDual}
 import LOCO.utils.ProjectionUtils._
+
+import scala.collection.immutable.Iterable
 
 object CVUtils {
 
@@ -50,6 +53,7 @@ object CVUtils {
   def globalCV(
       sc : SparkContext,
       classification : Boolean,
+      logistic : Boolean,
       seed : Int,
       data : RDD[FeatureVectorLP],
       response: DenseVector[Double],
@@ -67,7 +71,8 @@ object CVUtils {
       stoppingDualityGap : Double,
       privateLOCO : Boolean,
       privateEps : Double,
-      privateDelta : Double) : Double = {
+      privateDelta : Double,
+      debug : Boolean) : (Double, Option[Array[(Double, Double, Double)]]) = {
 
     // get number of observations
     val nObs = response.length
@@ -95,7 +100,7 @@ object CVUtils {
       // test on local test points and return associated MSEs
       val lambdasAndErrorOnFold =
         runForLambdaSequence(
-          sc, classification, seed, data, response, (trainingIndices, testIndices), nFeats,
+          sc, classification, logistic, seed, data, response, (trainingIndices, testIndices), nFeats,
           nPartitions, nExecutors, projection, useSparseStructure, concatenate, nFeatsProj,
           lambdaSeq, numIterations, checkDualityGap, stoppingDualityGap,
           privateLOCO, privateEps, privateDelta)
@@ -105,12 +110,31 @@ object CVUtils {
     }
 
     // average performance of each lambda over k train/test pairs
-    val averageMSEoverKSets: Map[Double, Double] =
+    val lambdaWithErrors: Map[Double, DenseVector[Double]] =
       performanceOfParams
         .flatten
         .groupBy(_._1)
         .mapValues(vals => vals.map(elem => elem._2))
-        .mapValues(elem => breeze.linalg.sum(elem)/k.toDouble)
+        .mapValues(arrays => DenseVector(arrays))
+
+    val averageMSEoverKSets: Map[Double, Double] =
+      lambdaWithErrors.mapValues(elem => sum(elem)/elem.length.toDouble)
+
+    println("Performance: " + averageMSEoverKSets.toSeq.sortBy(_._2))
+
+    val lambda_with_mse_stats: Option[Array[(Double, Double, Double)]] =
+      if(debug){
+        val lambda_with_mse_sd = lambdaWithErrors.map{ case(lambda : Double, elem : DenseVector[Double]) =>
+          val mean = sum(elem)/elem.length.toDouble
+          val sumOfSq = sum(elem.map(arrayElement => math.pow(arrayElement - mean, 2)))
+          val sd: Double = 1/(elem.length.toDouble - 1) * sumOfSq
+          (lambda, mean, sd)
+        }.toArray
+        Some(lambda_with_mse_sd)
+      }else{
+        None
+      }
+
 
     // find min test MSE
     val bestMSE = averageMSEoverKSets.minBy(_._2)
@@ -119,7 +143,7 @@ object CVUtils {
     println("Global CV: Best lambda is " + bestMSE._1 + " with error " + bestMSE._2)
 
     // return lambda value associated with the best MSE
-    bestMSE._1
+    (bestMSE._1, lambda_with_mse_stats)
   }
 
   /**
@@ -159,6 +183,7 @@ object CVUtils {
   def runForLambdaSequence(
       sc : SparkContext,
       classification : Boolean,
+      logistic : Boolean,
       randomSeed : Int,
       data : RDD[FeatureVectorLP],
       response: DenseVector[Double],
@@ -238,7 +263,7 @@ object CVUtils {
         rawFeats.flatMap { oneLocalMat =>
           localDual.runLocalDualConcatenate_lambdaSeq(
             oneLocalMat, randomProjectionsConcatenated.value, responseTrainBC.value, lambdaSeq,
-            nObs, classification, numIterations, nFeatsProj, randomSeed, checkDualityGap,
+            nObs, classification, logistic, numIterations, nFeatsProj, randomSeed, checkDualityGap,
             stoppingDualityGap, naive)
         }
       } else {
@@ -246,15 +271,24 @@ object CVUtils {
         rawAndRandomFeats.flatMap { oneLocalMat =>
           localDual.runLocalDualAdd_lambdaSeq(
             oneLocalMat, randomProjectionsAdd.value, responseTrainBC.value, lambdaSeq, nObs,
-            classification, numIterations, nFeatsProj, randomSeed, checkDualityGap,
+            classification, logistic, numIterations, nFeatsProj, randomSeed, checkDualityGap,
             stoppingDualityGap, naive)
         }
       }
     }
 
+    val lambdasWithLocalPreds = lambdasWithLocalPredictions
+//      if(privateLOCO){
+//        val r = new scala.util.Random()
+//        val noiseVector =  DenseVector.tabulate(trainingTestIndices._2.length){case (i) => 0.95*r.nextGaussian()}
+//        lambdasWithLocalPredictions.mapValues(predictions => predictions + noiseVector)
+//      }else{
+//        lambdasWithLocalPredictions
+//      }
+
     // get predicted values for each value of lambda
     val lambdasWithPredictions: RDD[(Double, DenseVector[Double])] =
-      lambdasWithLocalPredictions.reduceByKey(_+_)
+      lambdasWithLocalPreds.reduceByKey(_+_)
 
     // broadcast test response vector
     val responseTestBC = sc.broadcast(response(trainingTestIndices._2).toDenseVector)
@@ -265,58 +299,164 @@ object CVUtils {
       lambdasWithPredictions.mapValues{
         predictionVector =>
           if(classification){
-            sum((responseTestBC.value :* predictionVector).map(x => if(x > 0.0) 0.0 else 1.0))/nTest.value
+            if(logistic){
+              val probabilities = predictionVector.map(x => 1/(1+math.exp(-x)))
+              val mappedToOutcome: DenseVector[Double] = probabilities.map(x => if(x > 0.5) 1.0 else -1.0)
+              0.5*sum(abs(mappedToOutcome - responseTestBC.value))/nTest.value
+            }else{
+              sum((responseTestBC.value :* predictionVector).map(x => if(x > 0.0) 0.0 else 1.0))/nTest.value
+            }
+
           }else{
             math.pow(norm(responseTestBC.value - predictionVector), 2)/nTest.value
           }
       }.collect()
 
 
-    // 1
-    //    val lambdasWithPredictions: Map[Double, DenseVector[Double]] =
-    //      lambdasWithLocalPredictions
-    //        .collect()
-    //        .groupBy(_._1)
-    //        .map{
-    //          case(lambda, localPred) =>
-    //            val globalPrediction: DenseVector[Double] = localPred.map(x => x._2).reduce(_ + _)
-    //            (lambda, globalPrediction)
-    //      }
-    //
-    //    val responseTest = response(trainingTestIndices._2).toDenseVector
-    //
-    //    val lambdasWithErrors: Array[(Double, Double)]  =
-    //      lambdasWithPredictions.mapValues{
-    //        predictionVector =>
-    //          if(classification){
-    //            sum((responseTest :* predictionVector).map(x => if(x > 0.0) 0.0 else 1.0))/responseTest.length.toDouble
-    //          }else{
-    //            math.pow(norm(responseTest - predictionVector), 2)
-    //          }
-    //      }.toArray
-
-    // 2
-//    val lambdasWithPredictions: Array[(Double, DenseVector[Double])] =
-//      lambdasWithLocalPredictions.reduceByKey(_ + _).collect()
-//
-//    val responseTestBC = sc.broadcast(response(trainingTestIndices._2).toDenseVector)
-//
-//    val lambdasWithErrors: Array[(Double, Double)] =
-//      lambdasWithPredictions.map {
-//        case (lambda, predictionVector) =>
-//          val MSE =
-//            if (classification) {
-//              sum((responseTestBC.value :* predictionVector).map(x => if (x > 0.0) 0.0 else 1.0)) / responseTestBC.value.length.toDouble
-//            } else {
-//              math.pow(norm(responseTestBC.value - predictionVector), 2)
-//            }
-//        (lambda, MSE)
-//      }
-
     rawAndRandomFeats.unpersist()
 
     // return lambdas with errors
     lambdasWithErrors
+  }
+
+
+  def crossValidationDualLocal(
+                                designMat : DenseMatrix[Double],
+                                response : Vector[Double],
+                                lambdaSeq : Seq[Double],
+                                k : Int,
+                                myseed : Int,
+                                nObs : Int,
+                                numIterations : Int,
+                                numFeatures : Int,
+                                classification : Boolean,
+//                                logistic : Boolean,
+                                checkDualityGap : Boolean,
+                                stoppingDualityGap : Double,
+                                numRawFeatures : Int) : (Double, Option[Array[(Double, Double, Double)]]) = {
+
+    // set seed
+    util.Random.setSeed(myseed)
+    val times = nObs/k + 1
+
+    // create indices for training and test examples
+    val shuffledIndices = util.Random.shuffle(List.fill(times)(1 to k).flatten).take(nObs)
+
+    // create training and test sets
+    val trainingAndTestSets: Array[((DenseMatrix[Double], DenseVector[Double]), (DenseMatrix[Double], DenseVector[Double]))] =
+      (1 to k).map { fold =>
+
+        val testInd = shuffledIndices.zipWithIndex.filter(x => x._1 == fold).map(_._2)
+        val myTestExamples =
+          (designMat(testInd ,::).toDenseMatrix, response(testInd).toDenseVector)
+
+        val trainInd = shuffledIndices.zipWithIndex.filter(x => x._1 != fold).map(_._2)
+        val myTrainingExamples =
+          (designMat(trainInd ,::).toDenseMatrix, response(trainInd).toDenseVector)
+
+        (myTrainingExamples, myTestExamples)
+      }.toArray
+
+    // for each lambda in sequence, return average MSE
+    val k_mse = trainingAndTestSets.flatMap {
+      // for each train and test set pair...
+      case (train, test) =>
+
+        val n = train._1.rows
+
+        // for each lambda...
+        lambdaSeq.map{ currentLambda =>
+          // ... train on train and test on test
+          val alpha =
+              if(classification){
+                SDCA.localSDCA(
+                  train._1, train._2, numIterations, currentLambda, n, numFeatures, myseed,
+                  checkDualityGap, stoppingDualityGap)
+              }else{
+                SDCA.localSDCARidge(
+                  train._1, train._2, numIterations, currentLambda, n, numFeatures, myseed,
+                  checkDualityGap, stoppingDualityGap)
+              }
+
+          val primalVarsNotScaled : DenseMatrix[Double] =
+            train._1.t * new DenseMatrix(n, 1, alpha.toArray)
+          val scaling = 1.0/(n*currentLambda)
+          val beta_hat_k : DenseVector[Double] = primalVarsNotScaled.toDenseVector * scaling
+
+          // compute performance
+          val performance =
+            if(classification){
+//
+//              if(logistic){
+//
+//              }else{
+                // compute predictions
+                val predictions : DenseVector[Double] =
+                  test._2 :*
+                    (test._1 * new DenseMatrix(numFeatures, 1, beta_hat_k.toArray)).toDenseVector
+
+                // compute misclassification error
+                predictions
+                  .toArray
+                  .map(x => if(x > 0.0) 0.0 else 1.0)
+                  .sum/test._2.length.toDouble
+//              }
+
+            }
+            else{
+              // compute predictions
+              val predictions : DenseVector[Double] =
+                (test._1 * new DenseMatrix(numFeatures, 1, beta_hat_k.toArray)).toDenseVector
+              //                (test._1(::,0 until numRawFeatures).toDenseMatrix * new DenseMatrix(numRawFeatures, 1, beta_hat_k(0 until numRawFeatures).toArray)).toDenseVector
+
+              // compute MSE
+//              1/test._2.length.toDouble * math.pow(norm(test._2 - predictions), 2)
+
+              math.pow(norm(test._2 - predictions), 2)/math.pow(norm(test._2 - breeze.stats.mean(test._2)), 2)
+
+            }
+
+          //return lambda and the performance for this lambda and this train/test pair
+          (currentLambda, performance)
+        }
+    }
+
+    // average performance of each lambda over k train/test pairs
+    val lambda_with_errors: Map[Double, DenseVector[Double]] =
+      k_mse
+        .groupBy(_._1)
+        .mapValues(vals => vals.map(elem => elem._2))
+        .mapValues(arrays => DenseVector(arrays))
+
+    val lambda_with_mse: Map[Double, Double] =
+      lambda_with_errors.mapValues(elem => breeze.stats.mean(elem)) // sum(elem)/elem.length.toDouble)
+
+    val debug = true
+
+    val lambda_with_mse_stats: Option[Array[(Double, Double, Double)]] =
+      if(debug){
+        val lambda_with_mse_sd = lambda_with_errors.map{ case(lambda : Double, elem : DenseVector[Double]) =>
+          val mean : Double =  breeze.stats.mean(elem) //sum(elem)/elem.length.toDouble
+//          val sumOfSq = breeze.stats.stddev(elem) // sum(elem.map(arrayElement => math.pow(arrayElement - mean, 2)))
+          val sd: Double =  breeze.stats.stddev(elem) // //1/(elem.length.toDouble - 1) * sumOfSq
+          (lambda, mean, sd)
+        }.toArray
+        Some(lambda_with_mse_sd)
+      }else{
+        None
+      }
+
+    println("Performance: " + lambda_with_mse.toSeq.sortBy(_._2))
+
+    // find min test MSE
+    val min_test_mse = lambda_with_mse.minBy(_._2)
+
+    // find corresponding lambda
+    val min_lambda = min_test_mse._1
+
+    println("Local CV: Best lambda is " + min_lambda + " with MSE " + min_test_mse._2)
+
+    (min_lambda, lambda_with_mse_stats)
   }
 
 }
